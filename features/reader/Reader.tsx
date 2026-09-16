@@ -71,17 +71,6 @@ function flattenToc(items: TocItem[], depth = 0): Array<{ item: TocItem; depth: 
   return items.flatMap((item) => [{ item, depth }, ...flattenToc(item.children || [], depth + 1)]);
 }
 
-function isReaderInteractiveTarget(target: EventTarget | null) {
-  const element = target as Element | null;
-  if (!element || typeof element.closest !== 'function') return false;
-  return Boolean(element.closest('a,button,input,textarea,select,label,[role="button"],[contenteditable="true"],img,svg,video,canvas'));
-}
-
-function hasTextSelection(doc: Document) {
-  const selection = doc.getSelection?.();
-  return Boolean(selection && !selection.isCollapsed && selection.toString().trim());
-}
-
 function epubRules(settings: ReaderSettings) {
   const colors = readerColors(settings);
   const verticalSpace = settings.marginTop + settings.marginBottom + 12;
@@ -188,48 +177,39 @@ function EpubSurface({ book, settings, onProgress, onVisual, onEpubLocations, na
           image.addEventListener('keydown',(event)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open()}});
         }
       };
-
-      const wireGestures=(contents:any)=>{
+      const wireMobileGestures=(contents:any)=>{
         const doc=contents?.document as Document|undefined;
-        const win=doc?.defaultView;
-        if(!doc||!win||doc.documentElement.dataset.magicGestures==='true')return;
-        doc.documentElement.dataset.magicGestures='true';
+        const root=doc?.documentElement as HTMLElement|undefined;
+        if(!doc||!root||root.dataset.magicReaderGestures==='true')return;
+        root.dataset.magicReaderGestures='true';
 
-        let startX=0;
-        let startY=0;
-        let startTarget:EventTarget|null=null;
-
-        const turnInside=(direction:'next'|'prev')=>navigationRef.current?.[direction]();
-
-        doc.addEventListener('touchstart',(event:TouchEvent)=>{
-          if(event.touches.length!==1)return;
-          const touch=event.touches[0];
-          startX=touch.clientX;
-          startY=touch.clientY;
-          startTarget=event.target;
+        let startX=0; let startY=0; let startTarget:EventTarget|null=null;
+        const isInteractive=(target:EventTarget|null)=>{
+          const element=target instanceof Element?target:null;
+          return Boolean(element?.closest('a,button,input,textarea,select,label,[role="button"],[contenteditable="true"],img,svg,video,canvas'));
+        };
+        const hasSelection=()=>{
+          const selection=doc.getSelection?.();
+          return Boolean(selection&&!selection.isCollapsed&&selection.toString().trim());
+        };
+        root.addEventListener('touchstart',(event:TouchEvent)=>{
+          if(event.changedTouches.length!==1)return;
+          const touch=event.changedTouches[0]; startX=touch.clientX; startY=touch.clientY; startTarget=event.target;
         },{passive:true});
-
-        doc.addEventListener('touchend',(event:TouchEvent)=>{
-          if(event.changedTouches.length!==1||!startTarget)return;
-
-          const target=startTarget;
+        root.addEventListener('touchend',(event:TouchEvent)=>{
+          if(event.changedTouches.length!==1||zoomOpenRef.current)return;
+          const touch=event.changedTouches[0]; const dx=touch.clientX-startX; const dy=touch.clientY-startY;
+          const width=Math.max(1,doc.defaultView?.innerWidth||root.clientWidth||1);
+          const swipeThreshold=Math.max(42,Math.min(90,width*.14));
+          if(Math.abs(dx)>=swipeThreshold&&Math.abs(dx)>Math.abs(dy)*1.15){
+            navigationRef.current?.[dx<0?'next':'prev'](); startTarget=null; return;
+          }
+          if(Math.abs(dx)<=12&&Math.abs(dy)<=12&&!isInteractive(startTarget)&&!hasSelection()){
+            const x=touch.clientX;
+            if(x<width*.48)navigationRef.current?.prev();
+            else if(x>width*.52)navigationRef.current?.next();
+          }
           startTarget=null;
-
-          if(zoomOpenRef.current||isReaderInteractiveTarget(target)||hasTextSelection(doc))return;
-
-          const touch=event.changedTouches[0];
-          const dx=touch.clientX-startX;
-          const dy=touch.clientY-startY;
-
-          if(Math.abs(dx)>=45&&Math.abs(dx)>Math.abs(dy)*1.2){
-            turnInside(dx<0?'next':'prev');
-            return;
-          }
-
-          if(Math.abs(dx)<=12&&Math.abs(dy)<=12){
-            const width=win.innerWidth||doc.documentElement.clientWidth||1;
-            turnInside(touch.clientX<width/2?'prev':'next');
-          }
         },{passive:true});
       };
       const syncZoom=()=>{
@@ -248,7 +228,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onEpubLocations, na
           if(src)setZoomImage({src,alt:selected?.alt||'Иллюстрация книги'});else{zoomOpenRef.current=false;setZoomImage(null)}
         },60);
       };
-      rendition.hooks.content.register((contents:any) => { void contents.addStylesheet('/reader-fonts.css'); applyEpubContent(contents,settingsRef.current); wireImages(contents); wireGestures(contents); });
+      rendition.hooks.content.register((contents:any) => { void contents.addStylesheet('/reader-fonts.css'); applyEpubContent(contents,settingsRef.current); wireImages(contents); wireMobileGestures(contents); });
       const enqueue=(action:()=>Promise<unknown>)=>{navigationQueue=navigationQueue.then(async()=>{await action()}).catch((error)=>console.error('EPUB navigation:',error));};
       navigationRef.current = { next:()=>enqueue(()=>rendition.next()), prev:()=>enqueue(()=>rendition.prev()), display:(target)=>enqueue(()=>rendition.display(target)) };
       const linearSpine = ((((instance.spine as any)?.spineItems) || []) as any[]).filter((item)=>item.linear!=='no');
@@ -304,7 +284,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onEpubLocations, na
         if (!active) return;
         const renderedContents = rendition.getContents() as any;
         for (const contents of Array.isArray(renderedContents) ? renderedContents : [renderedContents]) {
-          if (contents) { applyEpubContent(contents, settingsRef.current); wireImages(contents); wireGestures(contents); }
+          if (contents) { applyEpubContent(contents, settingsRef.current); wireImages(contents); wireMobileGestures(contents); }
         }
         syncZoom();
       }, 0));
@@ -432,44 +412,21 @@ function LegacyFb2Surface({ book, settings, page, setPage, onProgress, onVisual,
 }
 
 export function Reader({ book, settings, onSettings, onClose, onProgress, onEpubLocations }: Props) {
-  const [visual,setVisual]=useState({current:1,total:1,label:book.format==='fb2'?'Страница':'Страница главы'});
-  const navigationRef=useRef<{next:()=>void;prev:()=>void;display:(target:string)=>void}|null>(null);
-  const stageTouch=useRef<{x:number;y:number;target:EventTarget|null}|null>(null);
+  const [visual,setVisual]=useState({current:1,total:1,label:book.format==='fb2'?'Страница':'Страница главы'}); const navigationRef=useRef<{next:()=>void;prev:()=>void;display:(target:string)=>void}|null>(null);
+  const touchStart=useRef<{x:number;y:number;target:EventTarget|null}|null>(null);
   const progress=book.progress||0;
   const turn=(direction:'next'|'prev')=>navigationRef.current?.[direction]();
-
   useEffect(()=>{ const handler=(event:KeyboardEvent)=>{ if(['ArrowRight','PageDown'].includes(event.key))turn('next'); if(['ArrowLeft','PageUp'].includes(event.key))turn('prev') }; addEventListener('keydown',handler); return()=>removeEventListener('keydown',handler)},[]);
-
-  const onStageTouchStart=(event:React.TouchEvent<HTMLElement>)=>{
-    if(event.touches.length!==1)return;
-    const touch=event.touches[0];
-    stageTouch.current={x:touch.clientX,y:touch.clientY,target:event.target};
+  const stageTouchStart=(event:React.TouchEvent<HTMLElement>)=>{if(event.touches.length!==1)return;const touch=event.touches[0];touchStart.current={x:touch.clientX,y:touch.clientY,target:event.target}};
+  const stageTouchEnd=(event:React.TouchEvent<HTMLElement>)=>{
+    const start=touchStart.current;touchStart.current=null;if(!start||event.changedTouches.length!==1)return;
+    const element=start.target instanceof Element?start.target:null;if(element?.closest('button,a,input,textarea,select,label,[role="button"],[contenteditable="true"],img,svg,video,canvas'))return;
+    const selection=window.getSelection?.();if(selection&&!selection.isCollapsed&&selection.toString().trim())return;
+    const touch=event.changedTouches[0];const dx=touch.clientX-start.x;const dy=touch.clientY-start.y;const width=Math.max(1,event.currentTarget.getBoundingClientRect().width);
+    const swipeThreshold=Math.max(42,Math.min(90,width*.14));
+    if(Math.abs(dx)>=swipeThreshold&&Math.abs(dx)>Math.abs(dy)*1.15){turn(dx<0?'next':'prev');return}
+    if(Math.abs(dx)<=12&&Math.abs(dy)<=12){const rect=event.currentTarget.getBoundingClientRect();const x=touch.clientX-rect.left;if(x<rect.width*.48)turn('prev');else if(x>rect.width*.52)turn('next')}
   };
-
-  const onStageTouchEnd=(event:React.TouchEvent<HTMLElement>)=>{
-    const start=stageTouch.current;
-    stageTouch.current=null;
-    if(!start||event.changedTouches.length!==1||isReaderInteractiveTarget(start.target))return;
-
-    const selection=window.getSelection?.();
-    if(selection&&!selection.isCollapsed&&selection.toString().trim())return;
-
-    const touch=event.changedTouches[0];
-    const dx=touch.clientX-start.x;
-    const dy=touch.clientY-start.y;
-
-    if(Math.abs(dx)>=45&&Math.abs(dx)>Math.abs(dy)*1.2){
-      turn(dx<0?'next':'prev');
-      return;
-    }
-
-    if(Math.abs(dx)<=12&&Math.abs(dy)<=12){
-      const rect=event.currentTarget.getBoundingClientRect();
-      const x=touch.clientX-rect.left;
-      turn(x<rect.width/2?'prev':'next');
-    }
-  };
-
   const pageWidth=settings.contentWidth>=1600?'100%':`min(100%, ${settings.contentWidth+settings.marginLeft+settings.marginRight}px)`;
   return <main className="reader-shell">
     <header className="reader-topbar"><Button variant="ghost" size="icon-lg" aria-label="Назад в библиотеку" onClick={onClose}><ArrowLeft/></Button><div className="reader-title"><strong>{book.title}</strong><span>{book.authors.join(', ')}</span></div><div className="reader-actions">
@@ -477,7 +434,7 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
       <Sheet><SheetTrigger render={<Button variant="ghost" size="icon-lg" aria-label="Настройки чтения"/>}><Settings2/></SheetTrigger><SheetContent side="right" className="reader-sheet"><SheetHeader><SheetTitle>Настройки чтения</SheetTitle><SheetDescription>Изменения применяются сразу и сохраняются</SheetDescription></SheetHeader><ReaderSettingsPanel value={settings} onChange={onSettings}/></SheetContent></Sheet>
       <Button variant="ghost" size="icon-lg" aria-label="Полный экран" onClick={()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}><Expand/></Button>
     </div></header>
-    <section className="reader-stage" onTouchStart={onStageTouchStart} onTouchEnd={onStageTouchEnd}><button className="turn-zone left" aria-label="Предыдущая страница" onClick={()=>turn('prev')}/><div className="reader-page" style={{width:pageWidth}}>{book.format==='epub'?<EpubSurface book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} onEpubLocations={onEpubLocations} navigationRef={navigationRef}/>:<Fb2SurfaceStable book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} navigationRef={navigationRef}/>}</div><button className="turn-zone right" aria-label="Следующая страница" onClick={()=>turn('next')}/></section>
+    <section className="reader-stage" onTouchStart={stageTouchStart} onTouchEnd={stageTouchEnd}><button className="turn-zone left" aria-label="Предыдущая страница" onClick={()=>turn('prev')}/><div className="reader-page" style={{width:pageWidth}}>{book.format==='epub'?<EpubSurface book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} onEpubLocations={onEpubLocations} navigationRef={navigationRef}/>:<Fb2SurfaceStable book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} navigationRef={navigationRef}/>}</div><button className="turn-zone right" aria-label="Следующая страница" onClick={()=>turn('next')}/></section>
     <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}</span><Progress value={progress} aria-label={`Прочитано ${progress}%`}/><b>{progress}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
   </main>;
 }
