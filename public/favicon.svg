@@ -1,6 +1,54 @@
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M22 19.2727C22 20.779 20.779 22 19.2727 22H14.7273C13.221 22 12 20.779 12 19.2727V12H19.2727C20.779 12 22 13.221 22 14.7273V19.2727Z" fill="#68C4FF"/>
-<path d="M20 2C21.1046 2 22 2.89543 22 4V7C22 8.10457 21.1046 9 20 9H17C15.8954 9 15 8.10457 15 7V4C15 2.89543 15.8954 2 17 2H20Z" fill="#0C79D8"/>
-<path d="M7 15C8.10457 15 9 15.8954 9 17V20C9 21.1046 8.10457 22 7 22H4C2.89543 22 2 21.1046 2 20V17C2 15.8954 2.89543 15 4 15H7Z" fill="#0C79D8"/>
-<path d="M12 12H4.72727C3.22104 12 2 10.779 2 9.27273V4.72727C2 3.22104 3.22104 2 4.72727 2H9.27273C10.779 2 12 3.22104 12 4.72727V12Z" fill="#2E9EFF"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d9eff9"/>
+      <stop offset="52%" stop-color="#f1e4d4"/>
+      <stop offset="100%" stop-color="#8a4d2c"/>
+    </linearGradient>
+
+    <linearGradient id="letter" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="38%" stop-color="#e7c08b"/>
+      <stop offset="72%" stop-color="#a55b31"/>
+      <stop offset="100%" stop-color="#5e2d1b"/>
+    </linearGradient>
+
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10"
+        flood-color="#4a2517" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <path
+    d="M118 360
+       C133 284 143 208 153 139
+       C156 118 171 105 191 105
+       C210 105 221 116 227 135
+       L265 265
+       L303 135
+       C309 116 320 105 339 105
+       C359 105 374 118 377 139
+       C387 208 397 284 412 360
+       C416 382 402 398 381 398
+       C362 398 350 388 347 369
+       L329 228
+       L293 348
+       C288 367 279 376 264 376
+       C249 376 240 367 235 348
+       L199 228
+       L181 369
+       C178 388 166 398 147 398
+       C126 398 112 382 118 360Z"
+    fill="url(#letter)"
+    filter="url(#shadow)"
+  />
+
+  <g fill="#fff7e8">
+    <path d="M398 91 l7 17 18 7-18 7-7 18-7-18-18-7 18-7z"/>
+    <path d="M102 129 l4 10 10 4-10 4-4 10-4-10-10-4 10-4z"/>
+    <circle cx="390" cy="174" r="5"/>
+    <circle cx="119" cy="326" r="4"/>
+  </g>
 </svg>
