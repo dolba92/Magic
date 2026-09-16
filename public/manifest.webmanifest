@@ -1,1 +1,25 @@
-{"name":"Magic","short_name":"Magic","lang":"ru","start_url":"/","display":"standalone","background_color":"#efe7da","theme_color":"#5a301f","icons":[]}
+{
+  "name": "Magic — личная библиотека",
+  "short_name": "Magic",
+  "description": "Личная библиотека и читалка EPUB/FB2",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6efe5",
+  "theme_color": "#6f3f27",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
