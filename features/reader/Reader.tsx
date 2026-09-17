@@ -153,7 +153,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterRemaining,
   const settingsRef = useRef(settings); const progressRef = useRef(onProgress); const visualRef = useRef(onVisual); const cacheRef = useRef(onEpubLocations);
   settingsRef.current = settings; progressRef.current = onProgress; visualRef.current = onVisual; cacheRef.current = onEpubLocations;
   const [ready,setReady]=useState(false); const [zoomImage,setZoomImage]=useState<{src:string;alt:string}|null>(null);const zoomOpenRef=useRef(false);
-  const pageMapRef=useRef<{key:string;counts:number[]}|null>(null); const mapVersionRef=useRef(0);
+  const pageMapRef=useRef<{key:string;counts:number[];boundaries:number[]}|null>(null); const mapVersionRef=useRef(0);
   const rebuildMapRef=useRef<(()=>void)|null>(null);
 
   useEffect(() => {
@@ -202,14 +202,10 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterRemaining,
         syncZoom();
         const currentHost=host.current; const map=pageMapRef.current;
         const columns=currentHost?epubColumnCount(settingsRef.current,currentHost.clientWidth):1;
-        const displayedPage=Math.max(1,Number(location.start.displayed?.page)||1);
-        const displayedTotal=Math.max(displayedPage,Number(location.start.displayed?.total)||1);
-        const chapterPage=Math.max(1,Math.floor((displayedPage-1)/columns)+1);
-        const chapterTotal=Math.max(chapterPage,Math.ceil(displayedTotal/columns));
-        onChapterRemaining(Math.max(0,chapterTotal-chapterPage));
         const key=currentHost?epubLayoutKey(settingsRef.current,currentHost.clientWidth,currentHost.clientHeight):'';
         const spinePosition=linearSpine.findIndex((item)=>item.index===location.start.index||item.href===location.start.href);
         if(!map||map.key!==key||spinePosition<0){
+          onChapterRemaining(null);
           visualRef.current({current:0,total:0,label:'Пересчитываем страницы…'});
           progressRef.current({kind:'epub',cfi:location.start.cfi},book.progress||0);
           return;
@@ -217,6 +213,8 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterRemaining,
         const localPage=Math.max(1,Math.floor(((Number(location.start.displayed?.page)||1)-1)/columns)+1);
         const total=Math.max(1,map.counts.reduce((sum,value)=>sum+value,0));
         const current=Math.max(1,Math.min(total,map.counts.slice(0,spinePosition).reduce((sum,value)=>sum+value,0)+localPage));
+        const nextBoundary=map.boundaries.find((page)=>page>current)??(total+1);
+        onChapterRemaining(Math.max(0,nextBoundary-current-1));
         const progress=Math.max(0,Math.min(100,Math.round(current/total*100)));
         visualRef.current({current,total,label:'Страница'});
         progressRef.current({ kind:'epub', cfi:location.start.cfi }, progress);
@@ -242,8 +240,33 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterRemaining,
               const location=measureRendition.currentLocation();const pageTotal=Math.max(1,Number(location?.start?.displayed?.total)||1);
               counts.push(Math.max(1,Math.ceil(pageTotal/epubColumnCount(measuredSettings,width))));
             }
+
+            // EPUB-файл (spine item) может содержать сразу несколько настоящих глав.
+            // Поэтому границы глав берём из оглавления, а не из displayed.total текущего spine item.
+            const tocTargets=flattenToc(book.toc||[])
+              .map(({item})=>item.href||item.sectionId||'')
+              .filter((target):target is string=>Boolean(target));
+            const boundaryPages:number[]=[];
+            const measuredColumns=epubColumnCount(measuredSettings,width);
+            for(const target of tocTargets){
+              if(!active||version!==mapVersionRef.current)return;
+              try{
+                await measureRendition.display(target);
+                await new Promise<void>((resolve)=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+                const tocLocation=measureRendition.currentLocation();
+                const tocSpinePosition=measureSpine.findIndex((item)=>item.index===tocLocation?.start?.index||item.href===tocLocation?.start?.href);
+                if(tocSpinePosition<0)continue;
+                const tocLocalPage=Math.max(1,Math.floor(((Number(tocLocation?.start?.displayed?.page)||1)-1)/measuredColumns)+1);
+                const globalPage=counts.slice(0,tocSpinePosition).reduce((sum,value)=>sum+value,0)+tocLocalPage;
+                if(Number.isFinite(globalPage)&&globalPage>=1)boundaryPages.push(globalPage);
+              }catch(error){
+                console.warn('EPUB TOC boundary:',target,error);
+              }
+            }
+            const boundaries=[...new Set(boundaryPages)].sort((a,b)=>a-b);
+
             if(active&&version===mapVersionRef.current&&key===epubLayoutKey(settingsRef.current,currentHost.clientWidth,currentHost.clientHeight)){
-              pageMapRef.current={key,counts};report(rendition.currentLocation());
+              pageMapRef.current={key,counts,boundaries};report(rendition.currentLocation());
             }
           }catch(error){if(active&&version===mapVersionRef.current)console.error('EPUB pagination map:',error)}finally{measureRendition?.destroy();measureBook?.destroy();measureHost.remove()}
         })(),180);
