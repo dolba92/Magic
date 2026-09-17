@@ -386,8 +386,15 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
 
   useEffect(()=>{
     const handler=(event:KeyboardEvent)=>{
-      if(['ArrowRight','PageDown'].includes(event.key))turn('next');
-      if(['ArrowLeft','PageUp'].includes(event.key))turn('prev');
+      if(['ArrowRight','PageDown'].includes(event.key)){
+        event.preventDefault();
+        turn('next');
+        return;
+      }
+      if(['ArrowLeft','PageUp'].includes(event.key)){
+        event.preventDefault();
+        turn('prev');
+      }
     };
     addEventListener('keydown',handler);
     return()=>removeEventListener('keydown',handler);
@@ -425,6 +432,13 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
   return <main className="reader-shell">
     <style>{`
       .mobile-page-zone{display:none}
+      .turn-zone:focus,
+      .turn-zone:focus-visible,
+      .mobile-page-zone:focus,
+      .mobile-page-zone:focus-visible{
+        outline:none!important;
+        box-shadow:none!important;
+      }
       @media (max-width:820px){
         .reader-stage{position:relative!important}
         .mobile-page-zone{
@@ -454,9 +468,9 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
     </div></header>
 
     <section className="reader-stage">
-      <button className="turn-zone left" aria-label="Предыдущая страница" onClick={()=>turn('prev')}/>
+      <button className="turn-zone left" tabIndex={-1} aria-label="Предыдущая страница" onMouseDown={(event)=>event.preventDefault()} onClick={()=>turn('prev')}/>
       <div className="reader-page" style={{width:pageWidth}}>{book.format==='epub'?<EpubSurface book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} onEpubLocations={onEpubLocations} navigationRef={navigationRef}/>:<Fb2SurfaceStable book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} navigationRef={navigationRef}/>}</div>
-      <button className="turn-zone right" aria-label="Следующая страница" onClick={()=>turn('next')}/>
+      <button className="turn-zone right" tabIndex={-1} aria-label="Следующая страница" onMouseDown={(event)=>event.preventDefault()} onClick={()=>turn('next')}/>
 
       <button
         type="button"
