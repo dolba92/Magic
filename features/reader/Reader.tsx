@@ -148,12 +148,12 @@ function ImageZoomOverlay({image,onClose}:{image:{src:string;alt:string};onClose
   </div>;
 }
 
-function EpubSurface({ book, settings, onProgress, onVisual, onChapterRemaining, onEpubLocations, navigationRef }: { book: BookRecord; settings: ReaderSettings; onProgress: Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; onChapterRemaining:(value:number|null)=>void; onEpubLocations:Props['onEpubLocations']; navigationRef: React.MutableRefObject<{ next:()=>void; prev:()=>void; display:(target:string)=>void } | null> }) {
+function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEpubLocations, navigationRef }: { book: BookRecord; settings: ReaderSettings; onProgress: Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; onChapterInfo:(value:{title:string;remaining:number|null}|null)=>void; onEpubLocations:Props['onEpubLocations']; navigationRef: React.MutableRefObject<{ next:()=>void; prev:()=>void; display:(target:string)=>void } | null> }) {
   const host = useRef<HTMLDivElement>(null); const bookRef = useRef<any>(null); const renditionRef = useRef<any>(null);
   const settingsRef = useRef(settings); const progressRef = useRef(onProgress); const visualRef = useRef(onVisual); const cacheRef = useRef(onEpubLocations);
   settingsRef.current = settings; progressRef.current = onProgress; visualRef.current = onVisual; cacheRef.current = onEpubLocations;
   const [ready,setReady]=useState(false); const [zoomImage,setZoomImage]=useState<{src:string;alt:string}|null>(null);const zoomOpenRef=useRef(false);
-  const pageMapRef=useRef<{key:string;counts:number[];boundaries:number[]}|null>(null); const mapVersionRef=useRef(0);
+  const pageMapRef=useRef<{key:string;counts:number[];chapters:Array<{page:number;label:string}>}|null>(null); const mapVersionRef=useRef(0);
   const rebuildMapRef=useRef<(()=>void)|null>(null);
 
   useEffect(() => {
@@ -205,7 +205,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterRemaining,
         const key=currentHost?epubLayoutKey(settingsRef.current,currentHost.clientWidth,currentHost.clientHeight):'';
         const spinePosition=linearSpine.findIndex((item)=>item.index===location.start.index||item.href===location.start.href);
         if(!map||map.key!==key||spinePosition<0){
-          onChapterRemaining(null);
+          onChapterInfo(null);
           visualRef.current({current:0,total:0,label:'Пересчитываем страницы…'});
           progressRef.current({kind:'epub',cfi:location.start.cfi},book.progress||0);
           return;
@@ -213,8 +213,10 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterRemaining,
         const localPage=Math.max(1,Math.floor(((Number(location.start.displayed?.page)||1)-1)/columns)+1);
         const total=Math.max(1,map.counts.reduce((sum,value)=>sum+value,0));
         const current=Math.max(1,Math.min(total,map.counts.slice(0,spinePosition).reduce((sum,value)=>sum+value,0)+localPage));
-        const nextBoundary=map.boundaries.find((page)=>page>current)??(total+1);
-        onChapterRemaining(Math.max(0,nextBoundary-current-1));
+        const currentChapter=[...map.chapters].reverse().find((chapter)=>chapter.page<=current)||null;
+        const nextChapter=map.chapters.find((chapter)=>chapter.page>current)||null;
+        const chapterRemaining=currentChapter?Math.max(0,(nextChapter?.page??(total+1))-current-1):null;
+        onChapterInfo(currentChapter?{title:currentChapter.label,remaining:chapterRemaining}:null);
         const progress=Math.max(0,Math.min(100,Math.round(current/total*100)));
         visualRef.current({current,total,label:'Страница'});
         progressRef.current({ kind:'epub', cfi:location.start.cfi }, progress);
@@ -244,11 +246,11 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterRemaining,
             // EPUB-файл (spine item) может содержать сразу несколько настоящих глав.
             // Поэтому границы глав берём из оглавления, а не из displayed.total текущего spine item.
             const tocTargets=flattenToc(book.toc||[])
-              .map(({item})=>item.href||item.sectionId||'')
-              .filter((target):target is string=>Boolean(target));
-            const boundaryPages:number[]=[];
+              .map(({item})=>({target:item.href||item.sectionId||'',label:(item.label||'').trim()}))
+              .filter(({target,label})=>Boolean(target&&label));
+            const chapterPages=new Map<number,string>();
             const measuredColumns=epubColumnCount(measuredSettings,width);
-            for(const target of tocTargets){
+            for(const {target,label} of tocTargets){
               if(!active||version!==mapVersionRef.current)return;
               try{
                 await measureRendition.display(target);
@@ -258,15 +260,15 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterRemaining,
                 if(tocSpinePosition<0)continue;
                 const tocLocalPage=Math.max(1,Math.floor(((Number(tocLocation?.start?.displayed?.page)||1)-1)/measuredColumns)+1);
                 const globalPage=counts.slice(0,tocSpinePosition).reduce((sum,value)=>sum+value,0)+tocLocalPage;
-                if(Number.isFinite(globalPage)&&globalPage>=1)boundaryPages.push(globalPage);
+                if(Number.isFinite(globalPage)&&globalPage>=1)chapterPages.set(globalPage,label);
               }catch(error){
                 console.warn('EPUB TOC boundary:',target,error);
               }
             }
-            const boundaries=[...new Set(boundaryPages)].sort((a,b)=>a-b);
+            const chapters=[...chapterPages.entries()].map(([page,label])=>({page,label})).sort((a,b)=>a.page-b.page);
 
             if(active&&version===mapVersionRef.current&&key===epubLayoutKey(settingsRef.current,currentHost.clientWidth,currentHost.clientHeight)){
-              pageMapRef.current={key,counts,boundaries};report(rendition.currentLocation());
+              pageMapRef.current={key,counts,chapters};report(rendition.currentLocation());
             }
           }catch(error){if(active&&version===mapVersionRef.current)console.error('EPUB pagination map:',error)}finally{measureRendition?.destroy();measureBook?.destroy();measureHost.remove()}
         })(),180);
@@ -406,13 +408,19 @@ function LegacyFb2Surface({ book, settings, page, setPage, onProgress, onVisual,
 
 export function Reader({ book, settings, onSettings, onClose, onProgress, onEpubLocations }: Props) {
   const [visual,setVisual]=useState({current:1,total:1,label:book.format==='fb2'?'Страница':'Страница главы'});
-  const [chapterRemaining,setChapterRemaining]=useState<number|null>(null);
+  const [chapterInfo,setChapterInfo]=useState<{title:string;remaining:number|null}|null>(null);
   const navigationRef=useRef<{next:()=>void;prev:()=>void;display:(target:string)=>void}|null>(null);
   const mobileGestureStart=useRef<{x:number;y:number}|null>(null);
   const suppressTapUntil=useRef(0);
   const progress=book.progress||0;
   const turn=(direction:'next'|'prev')=>navigationRef.current?.[direction]();
-  useEffect(()=>setChapterRemaining(null),[book.id]);
+  useEffect(()=>setChapterInfo(null),[book.id]);
+  useEffect(()=>{
+    if(!chapterInfo?.title||typeof window==='undefined')return;
+    try{
+      localStorage.setItem(`magic-reader-chapter:${book.id}`,JSON.stringify({...chapterInfo,updatedAt:Date.now()}));
+    }catch{}
+  },[book.id,chapterInfo]);
 
   useEffect(()=>{
     const handler=(event:KeyboardEvent)=>{
@@ -499,7 +507,7 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
 
     <section className="reader-stage">
       <button className="turn-zone left" tabIndex={-1} aria-label="Предыдущая страница" onMouseDown={(event)=>event.preventDefault()} onClick={()=>turn('prev')}/>
-      <div className="reader-page" style={{width:pageWidth}}>{book.format==='epub'?<EpubSurface book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} onChapterRemaining={setChapterRemaining} onEpubLocations={onEpubLocations} navigationRef={navigationRef}/>:<Fb2SurfaceStable book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} navigationRef={navigationRef}/>}</div>
+      <div className="reader-page" style={{width:pageWidth}}>{book.format==='epub'?<EpubSurface book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} onChapterInfo={setChapterInfo} onEpubLocations={onEpubLocations} navigationRef={navigationRef}/>:<Fb2SurfaceStable book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} navigationRef={navigationRef}/>}</div>
       <button className="turn-zone right" tabIndex={-1} aria-label="Следующая страница" onMouseDown={(event)=>event.preventDefault()} onClick={()=>turn('next')}/>
 
       <button
@@ -520,6 +528,6 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
       />
     </section>
 
-    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}{book.format==='epub'&&chapterRemaining!==null?(chapterRemaining===0?' · конец главы':` · в главе ещё ${chapterRemaining} стр.`):''}</span><Progress value={progress} aria-label={`Прочитано ${progress}%`}/><b>{progress}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
+    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}{book.format==='epub'&&chapterInfo?.title?` · ${chapterInfo.title}${chapterInfo.remaining===0?' · конец главы':chapterInfo.remaining!==null?` · ещё ${chapterInfo.remaining} стр.`:''}`:''}</span><Progress value={progress} aria-label={`Прочитано ${progress}%`}/><b>{progress}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
   </main>;
 }
