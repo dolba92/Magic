@@ -148,7 +148,7 @@ function ImageZoomOverlay({image,onClose}:{image:{src:string;alt:string};onClose
   </div>;
 }
 
-function EpubSurface({ book, settings, onProgress, onVisual, onEpubLocations, navigationRef }: { book: BookRecord; settings: ReaderSettings; onProgress: Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; onEpubLocations:Props['onEpubLocations']; navigationRef: React.MutableRefObject<{ next:()=>void; prev:()=>void; display:(target:string)=>void } | null> }) {
+function EpubSurface({ book, settings, onProgress, onVisual, onChapterRemaining, onEpubLocations, navigationRef }: { book: BookRecord; settings: ReaderSettings; onProgress: Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; onChapterRemaining:(value:number|null)=>void; onEpubLocations:Props['onEpubLocations']; navigationRef: React.MutableRefObject<{ next:()=>void; prev:()=>void; display:(target:string)=>void } | null> }) {
   const host = useRef<HTMLDivElement>(null); const bookRef = useRef<any>(null); const renditionRef = useRef<any>(null);
   const settingsRef = useRef(settings); const progressRef = useRef(onProgress); const visualRef = useRef(onVisual); const cacheRef = useRef(onEpubLocations);
   settingsRef.current = settings; progressRef.current = onProgress; visualRef.current = onVisual; cacheRef.current = onEpubLocations;
@@ -201,6 +201,12 @@ function EpubSurface({ book, settings, onProgress, onVisual, onEpubLocations, na
         if (!location?.start?.cfi) return;
         syncZoom();
         const currentHost=host.current; const map=pageMapRef.current;
+        const columns=currentHost?epubColumnCount(settingsRef.current,currentHost.clientWidth):1;
+        const displayedPage=Math.max(1,Number(location.start.displayed?.page)||1);
+        const displayedTotal=Math.max(displayedPage,Number(location.start.displayed?.total)||1);
+        const chapterPage=Math.max(1,Math.floor((displayedPage-1)/columns)+1);
+        const chapterTotal=Math.max(chapterPage,Math.ceil(displayedTotal/columns));
+        onChapterRemaining(Math.max(0,chapterTotal-chapterPage));
         const key=currentHost?epubLayoutKey(settingsRef.current,currentHost.clientWidth,currentHost.clientHeight):'';
         const spinePosition=linearSpine.findIndex((item)=>item.index===location.start.index||item.href===location.start.href);
         if(!map||map.key!==key||spinePosition<0){
@@ -208,7 +214,6 @@ function EpubSurface({ book, settings, onProgress, onVisual, onEpubLocations, na
           progressRef.current({kind:'epub',cfi:location.start.cfi},book.progress||0);
           return;
         }
-        const columns=epubColumnCount(settingsRef.current,currentHost!.clientWidth);
         const localPage=Math.max(1,Math.floor(((Number(location.start.displayed?.page)||1)-1)/columns)+1);
         const total=Math.max(1,map.counts.reduce((sum,value)=>sum+value,0));
         const current=Math.max(1,Math.min(total,map.counts.slice(0,spinePosition).reduce((sum,value)=>sum+value,0)+localPage));
@@ -378,11 +383,13 @@ function LegacyFb2Surface({ book, settings, page, setPage, onProgress, onVisual,
 
 export function Reader({ book, settings, onSettings, onClose, onProgress, onEpubLocations }: Props) {
   const [visual,setVisual]=useState({current:1,total:1,label:book.format==='fb2'?'Страница':'Страница главы'});
+  const [chapterRemaining,setChapterRemaining]=useState<number|null>(null);
   const navigationRef=useRef<{next:()=>void;prev:()=>void;display:(target:string)=>void}|null>(null);
   const mobileGestureStart=useRef<{x:number;y:number}|null>(null);
   const suppressTapUntil=useRef(0);
   const progress=book.progress||0;
   const turn=(direction:'next'|'prev')=>navigationRef.current?.[direction]();
+  useEffect(()=>setChapterRemaining(null),[book.id]);
 
   useEffect(()=>{
     const handler=(event:KeyboardEvent)=>{
@@ -469,7 +476,7 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
 
     <section className="reader-stage">
       <button className="turn-zone left" tabIndex={-1} aria-label="Предыдущая страница" onMouseDown={(event)=>event.preventDefault()} onClick={()=>turn('prev')}/>
-      <div className="reader-page" style={{width:pageWidth}}>{book.format==='epub'?<EpubSurface book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} onEpubLocations={onEpubLocations} navigationRef={navigationRef}/>:<Fb2SurfaceStable book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} navigationRef={navigationRef}/>}</div>
+      <div className="reader-page" style={{width:pageWidth}}>{book.format==='epub'?<EpubSurface book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} onChapterRemaining={setChapterRemaining} onEpubLocations={onEpubLocations} navigationRef={navigationRef}/>:<Fb2SurfaceStable book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} navigationRef={navigationRef}/>}</div>
       <button className="turn-zone right" tabIndex={-1} aria-label="Следующая страница" onMouseDown={(event)=>event.preventDefault()} onClick={()=>turn('next')}/>
 
       <button
@@ -490,6 +497,6 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
       />
     </section>
 
-    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}</span><Progress value={progress} aria-label={`Прочитано ${progress}%`}/><b>{progress}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
+    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}{book.format==='epub'&&chapterRemaining!==null?(chapterRemaining===0?' · конец главы':` · до конца главы ${chapterRemaining} стр.`):''}</span><Progress value={progress} aria-label={`Прочитано ${progress}%`}/><b>{progress}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
   </main>;
 }
