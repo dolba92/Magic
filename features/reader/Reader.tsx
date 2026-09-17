@@ -520,6 +520,6 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
       />
     </section>
 
-    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}{book.format==='epub'&&chapterRemaining!==null?(chapterRemaining===0?' · конец главы':` · до конца главы ${chapterRemaining} стр.`):''}</span><Progress value={progress} aria-label={`Прочитано ${progress}%`}/><b>{progress}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
+    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}{book.format==='epub'&&chapterRemaining!==null?(chapterRemaining===0?' · конец главы':` · в главе ещё ${chapterRemaining} стр.`):''}</span><Progress value={progress} aria-label={`Прочитано ${progress}%`}/><b>{progress}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
   </main>;
 }
