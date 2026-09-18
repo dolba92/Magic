@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Expand, ListTree, Minus, Plus, RotateCcw, Settings2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
 import { Fb2SurfaceStable } from '@/features/reader/Fb2Surface';
@@ -14,13 +15,6 @@ type Props = {
   book: BookRecord; settings: ReaderSettings; onSettings: (settings: ReaderSettings) => void;
   onClose: () => void; onProgress: (location: ReaderLocation, progress: number) => void;
   onEpubLocations: (locations: string) => void;
-};
-
-type ReaderNavigation = {
-  next: () => void;
-  prev: () => void;
-  display: (target: string) => void;
-  seek?: (progress: number) => void;
 };
 
 const themes: Record<string, { label: string; bg: string; text: string }> = {
@@ -154,7 +148,7 @@ function ImageZoomOverlay({image,onClose}:{image:{src:string;alt:string};onClose
   </div>;
 }
 
-function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEpubLocations, navigationRef }: { book: BookRecord; settings: ReaderSettings; onProgress: Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; onChapterInfo:(value:{title:string;remaining:number|null}|null)=>void; onEpubLocations:Props['onEpubLocations']; navigationRef: React.MutableRefObject<ReaderNavigation | null> }) {
+function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEpubLocations, navigationRef, seekRef }: { book: BookRecord; settings: ReaderSettings; onProgress: Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; onChapterInfo:(value:{title:string;remaining:number|null}|null)=>void; onEpubLocations:Props['onEpubLocations']; navigationRef: React.MutableRefObject<{ next:()=>void; prev:()=>void; display:(target:string)=>void } | null>; seekRef:React.MutableRefObject<((progress:number)=>void)|null> }) {
   const host = useRef<HTMLDivElement>(null); const bookRef = useRef<any>(null); const renditionRef = useRef<any>(null);
   const settingsRef = useRef(settings); const progressRef = useRef(onProgress); const visualRef = useRef(onVisual); const cacheRef = useRef(onEpubLocations);
   settingsRef.current = settings; progressRef.current = onProgress; visualRef.current = onVisual; cacheRef.current = onEpubLocations;
@@ -201,19 +195,22 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
       };
       rendition.hooks.content.register((contents:any) => { void contents.addStylesheet('/reader-fonts.css'); applyEpubContent(contents,settingsRef.current); wireImages(contents); });
       const enqueue=(action:()=>Promise<unknown>)=>{navigationQueue=navigationQueue.then(async()=>{await action()}).catch((error)=>console.error('EPUB navigation:',error));};
-      navigationRef.current = {
-        next:()=>enqueue(()=>rendition.next()),
-        prev:()=>enqueue(()=>rendition.prev()),
-        display:(target)=>enqueue(()=>rendition.display(target)),
-        seek:(progress)=>{
-          const clamped=Math.max(0,Math.min(100,progress));
+      navigationRef.current = { next:()=>enqueue(()=>rendition.next()), prev:()=>enqueue(()=>rendition.prev()), display:(target)=>enqueue(()=>rendition.display(target)) };
+      seekRef.current=(percent)=>{
+        const target=Math.max(0,Math.min(100,percent))/100;
+        enqueue(async()=>{
           try{
-            const cfi=instance.locations?.cfiFromPercentage?.(clamped/100);
-            if(cfi)enqueue(()=>rendition.display(cfi));
+            let cfi=instance.locations?.cfiFromPercentage?.(target);
+            if(!cfi){
+              await instance.locations.generate(1800);
+              if(active)cacheRef.current(instance.locations.save());
+              cfi=instance.locations?.cfiFromPercentage?.(target);
+            }
+            if(cfi)await rendition.display(cfi);
           }catch(error){
             console.error('EPUB seek:',error);
           }
-        },
+        });
       };
       const linearSpine = ((((instance.spine as any)?.spineItems) || []) as any[]).filter((item)=>item.linear!=='no');
       const report = (location:any) => {
@@ -341,7 +338,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
     })().catch((error) => console.error('EPUB reader:', error));
     return () => {
       active = false; clearTimeout(generationTimer);clearTimeout(mapTimer);mapVersionRef.current++;rebuildMapRef.current=null;if (idleId && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
-      cancelAnimationFrame(resizeFrame); observer?.disconnect(); navigationRef.current = null; renditionRef.current?.destroy(); bookRef.current?.destroy();
+      cancelAnimationFrame(resizeFrame); observer?.disconnect(); navigationRef.current = null; seekRef.current=null; renditionRef.current?.destroy(); bookRef.current?.destroy();
     };
   }, [book.id]);
 
@@ -364,7 +361,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
 }
 
 // oxlint-disable-next-line no-unused-vars
-function LegacyFb2Surface({ book, settings, page, setPage, onProgress, onVisual, navigationRef }: { book: BookRecord; settings: ReaderSettings; page:number; setPage:React.Dispatch<React.SetStateAction<number>>; onProgress:Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; navigationRef:React.MutableRefObject<ReaderNavigation|null> }) {
+function LegacyFb2Surface({ book, settings, page, setPage, onProgress, onVisual, navigationRef }: { book: BookRecord; settings: ReaderSettings; page:number; setPage:React.Dispatch<React.SetStateAction<number>>; onProgress:Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; navigationRef:React.MutableRefObject<{next:()=>void;prev:()=>void;display:(target:string)=>void}|null> }) {
   const viewport = useRef<HTMLDivElement>(null); const article = useRef<HTMLElement>(null);
   const prepared = useMemo(() => {
     const images = { ...book.fb2Images };
@@ -428,19 +425,17 @@ function LegacyFb2Surface({ book, settings, page, setPage, onProgress, onVisual,
 export function Reader({ book, settings, onSettings, onClose, onProgress, onEpubLocations }: Props) {
   const [visual,setVisual]=useState({current:1,total:1,label:book.format==='fb2'?'Страница':'Страница главы'});
   const [chapterInfo,setChapterInfo]=useState<{title:string;remaining:number|null}|null>(null);
-  const [sliderValue,setSliderValue]=useState(book.progress||0);
-  const [isSeeking,setIsSeeking]=useState(false);
-  const navigationRef=useRef<ReaderNavigation|null>(null);
+  const [seekValue,setSeekValue]=useState(book.progress||0);
+  const [seeking,setSeeking]=useState(false);
+  const navigationRef=useRef<{next:()=>void;prev:()=>void;display:(target:string)=>void}|null>(null);
+  const seekRef=useRef<((progress:number)=>void)|null>(null);
   const mobileGestureStart=useRef<{x:number;y:number}|null>(null);
   const suppressTapUntil=useRef(0);
   const progress=book.progress||0;
   const turn=(direction:'next'|'prev')=>navigationRef.current?.[direction]();
   useEffect(()=>setChapterInfo(null),[book.id]);
-  useEffect(()=>setSliderValue(book.progress||0),[book.id]);
-  useEffect(()=>{
-    if(!isSeeking)setSliderValue(progress);
-  },[progress,isSeeking]);
-
+  useEffect(()=>{setSeekValue(book.progress||0);setSeeking(false)},[book.id]);
+  useEffect(()=>{if(!seeking)setSeekValue(progress)},[progress,seeking]);
   useEffect(()=>{
     if(!chapterInfo?.title||typeof window==='undefined')return;
     try{
@@ -493,16 +488,48 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
 
   const pageWidth=settings.contentWidth>=1600?'100%':`min(100%, ${settings.contentWidth+settings.marginLeft+settings.marginRight}px)`;
 
-  const commitSeek=(next:number)=>{
-    setSliderValue(next);
-    setIsSeeking(false);
-    navigationRef.current?.seek?.(next);
+  const commitSeek=(value:number)=>{
+    const next=Math.max(0,Math.min(100,value));
+    setSeekValue(next);
+    setSeeking(false);
+    if(book.format==='epub')seekRef.current?.(next);
   };
 
   return <main className="reader-shell">
     <style>{`
       .mobile-page-zone{display:none}
-      .reader-progress-slider{margin-top:6px}
+      .reader-seek-wrap{display:flex;align-items:center;width:100%;min-width:0}
+      .reader-seek{
+        --seek-value:0%;
+        width:100%;
+        height:24px;
+        margin:0;
+        padding:0;
+        appearance:none;
+        -webkit-appearance:none;
+        background:transparent;
+        cursor:pointer;
+        touch-action:none;
+      }
+      .reader-seek::-webkit-slider-runnable-track{
+        height:5px;
+        border-radius:999px;
+        background:linear-gradient(to right,#a8643f 0%,#a8643f var(--seek-value),#d9c9b8 var(--seek-value),#d9c9b8 100%);
+      }
+      .reader-seek::-webkit-slider-thumb{
+        -webkit-appearance:none;
+        width:16px;
+        height:16px;
+        margin-top:-5.5px;
+        border-radius:50%;
+        border:2px solid #fff8ee;
+        background:#a8643f;
+        box-shadow:0 1px 4px rgba(74,43,27,.35);
+      }
+      .reader-seek::-moz-range-track{height:5px;border-radius:999px;background:#d9c9b8}
+      .reader-seek::-moz-range-progress{height:5px;border-radius:999px;background:#a8643f}
+      .reader-seek::-moz-range-thumb{width:16px;height:16px;border-radius:50%;border:2px solid #fff8ee;background:#a8643f;box-shadow:0 1px 4px rgba(74,43,27,.35)}
+      .reader-seek:focus-visible{outline:2px solid rgba(168,100,63,.45);outline-offset:2px;border-radius:999px}
       .turn-zone:focus,
       .turn-zone:focus-visible,
       .mobile-page-zone:focus,
@@ -540,7 +567,7 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
 
     <section className="reader-stage">
       <button className="turn-zone left" tabIndex={-1} aria-label="Предыдущая страница" onMouseDown={(event)=>event.preventDefault()} onClick={()=>turn('prev')}/>
-      <div className="reader-page" style={{width:pageWidth}}>{book.format==='epub'?<EpubSurface book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} onChapterInfo={setChapterInfo} onEpubLocations={onEpubLocations} navigationRef={navigationRef}/>:<Fb2SurfaceStable book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} navigationRef={navigationRef}/>}</div>
+      <div className="reader-page" style={{width:pageWidth}}>{book.format==='epub'?<EpubSurface book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} onChapterInfo={setChapterInfo} onEpubLocations={onEpubLocations} navigationRef={navigationRef} seekRef={seekRef}/>:<Fb2SurfaceStable book={book} settings={settings} onProgress={onProgress} onVisual={setVisual} navigationRef={navigationRef}/>}</div>
       <button className="turn-zone right" tabIndex={-1} aria-label="Следующая страница" onMouseDown={(event)=>event.preventDefault()} onClick={()=>turn('next')}/>
 
       <button
@@ -561,6 +588,6 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
       />
     </section>
 
-    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}{book.format==='epub'&&chapterInfo?.title?` · ${chapterInfo.title}${chapterInfo.remaining===0?' · конец главы':chapterInfo.remaining!==null?` · ещё ${chapterInfo.remaining} стр.`:''}`:''}</span><div className="reader-progress-slider"><Slider aria-label="Переход по книге" min={0} max={100} step={1} value={[sliderValue]} onValueChange={(next)=>{const value=Number(Array.isArray(next)?next[0]:next);setIsSeeking(true);setSliderValue(value);}} onValueCommit={(next)=>commitSeek(Number(Array.isArray(next)?next[0]:next))}/></div><b>{Math.round(isSeeking?sliderValue:progress)}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
+    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}{book.format==='epub'&&chapterInfo?.title?` · ${chapterInfo.title}${chapterInfo.remaining===0?' · конец главы':chapterInfo.remaining!==null?` · ещё ${chapterInfo.remaining} стр.`:''}`:''}</span>{book.format==='epub'?<div className="reader-seek-wrap"><input className="reader-seek" type="range" min={0} max={100} step={1} value={seekValue} aria-label={`Перейти по книге, ${Math.round(seekValue)}%`} style={{['--seek-value' as string]:`${seekValue}%`}} onPointerDown={()=>setSeeking(true)} onChange={(event)=>{setSeeking(true);setSeekValue(Number(event.currentTarget.value))}} onPointerUp={(event)=>commitSeek(Number(event.currentTarget.value))} onPointerCancel={()=>{setSeeking(false);setSeekValue(progress)}} onKeyUp={(event)=>{if(['ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'].includes(event.key))commitSeek(Number(event.currentTarget.value))}} onBlur={(event)=>{if(seeking)commitSeek(Number(event.currentTarget.value))}}/></div>:<Progress value={progress} aria-label={`Прочитано ${progress}%`}/>}<b>{Math.round(book.format==='epub'&&seeking?seekValue:progress)}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
   </main>;
 }
