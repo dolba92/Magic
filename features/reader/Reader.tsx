@@ -4,7 +4,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Expand, ListTree, Minus, Plus, RotateCcw, Settings2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
 import { Fb2SurfaceStable } from '@/features/reader/Fb2Surface';
@@ -15,6 +14,13 @@ type Props = {
   book: BookRecord; settings: ReaderSettings; onSettings: (settings: ReaderSettings) => void;
   onClose: () => void; onProgress: (location: ReaderLocation, progress: number) => void;
   onEpubLocations: (locations: string) => void;
+};
+
+type ReaderNavigation = {
+  next: () => void;
+  prev: () => void;
+  display: (target: string) => void;
+  seek?: (progress: number) => void;
 };
 
 const themes: Record<string, { label: string; bg: string; text: string }> = {
@@ -148,7 +154,7 @@ function ImageZoomOverlay({image,onClose}:{image:{src:string;alt:string};onClose
   </div>;
 }
 
-function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEpubLocations, navigationRef }: { book: BookRecord; settings: ReaderSettings; onProgress: Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; onChapterInfo:(value:{title:string;remaining:number|null}|null)=>void; onEpubLocations:Props['onEpubLocations']; navigationRef: React.MutableRefObject<{ next:()=>void; prev:()=>void; display:(target:string)=>void } | null> }) {
+function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEpubLocations, navigationRef }: { book: BookRecord; settings: ReaderSettings; onProgress: Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; onChapterInfo:(value:{title:string;remaining:number|null}|null)=>void; onEpubLocations:Props['onEpubLocations']; navigationRef: React.MutableRefObject<ReaderNavigation | null> }) {
   const host = useRef<HTMLDivElement>(null); const bookRef = useRef<any>(null); const renditionRef = useRef<any>(null);
   const settingsRef = useRef(settings); const progressRef = useRef(onProgress); const visualRef = useRef(onVisual); const cacheRef = useRef(onEpubLocations);
   settingsRef.current = settings; progressRef.current = onProgress; visualRef.current = onVisual; cacheRef.current = onEpubLocations;
@@ -195,7 +201,20 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
       };
       rendition.hooks.content.register((contents:any) => { void contents.addStylesheet('/reader-fonts.css'); applyEpubContent(contents,settingsRef.current); wireImages(contents); });
       const enqueue=(action:()=>Promise<unknown>)=>{navigationQueue=navigationQueue.then(async()=>{await action()}).catch((error)=>console.error('EPUB navigation:',error));};
-      navigationRef.current = { next:()=>enqueue(()=>rendition.next()), prev:()=>enqueue(()=>rendition.prev()), display:(target)=>enqueue(()=>rendition.display(target)) };
+      navigationRef.current = {
+        next:()=>enqueue(()=>rendition.next()),
+        prev:()=>enqueue(()=>rendition.prev()),
+        display:(target)=>enqueue(()=>rendition.display(target)),
+        seek:(progress)=>{
+          const clamped=Math.max(0,Math.min(100,progress));
+          try{
+            const cfi=instance.locations?.cfiFromPercentage?.(clamped/100);
+            if(cfi)enqueue(()=>rendition.display(cfi));
+          }catch(error){
+            console.error('EPUB seek:',error);
+          }
+        },
+      };
       const linearSpine = ((((instance.spine as any)?.spineItems) || []) as any[]).filter((item)=>item.linear!=='no');
       const report = (location:any) => {
         if (!location?.start?.cfi) return;
@@ -345,7 +364,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
 }
 
 // oxlint-disable-next-line no-unused-vars
-function LegacyFb2Surface({ book, settings, page, setPage, onProgress, onVisual, navigationRef }: { book: BookRecord; settings: ReaderSettings; page:number; setPage:React.Dispatch<React.SetStateAction<number>>; onProgress:Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; navigationRef:React.MutableRefObject<{next:()=>void;prev:()=>void;display:(target:string)=>void}|null> }) {
+function LegacyFb2Surface({ book, settings, page, setPage, onProgress, onVisual, navigationRef }: { book: BookRecord; settings: ReaderSettings; page:number; setPage:React.Dispatch<React.SetStateAction<number>>; onProgress:Props['onProgress']; onVisual:(value:{current:number;total:number;label:string})=>void; navigationRef:React.MutableRefObject<ReaderNavigation|null> }) {
   const viewport = useRef<HTMLDivElement>(null); const article = useRef<HTMLElement>(null);
   const prepared = useMemo(() => {
     const images = { ...book.fb2Images };
@@ -409,12 +428,19 @@ function LegacyFb2Surface({ book, settings, page, setPage, onProgress, onVisual,
 export function Reader({ book, settings, onSettings, onClose, onProgress, onEpubLocations }: Props) {
   const [visual,setVisual]=useState({current:1,total:1,label:book.format==='fb2'?'Страница':'Страница главы'});
   const [chapterInfo,setChapterInfo]=useState<{title:string;remaining:number|null}|null>(null);
-  const navigationRef=useRef<{next:()=>void;prev:()=>void;display:(target:string)=>void}|null>(null);
+  const [sliderValue,setSliderValue]=useState(book.progress||0);
+  const [isSeeking,setIsSeeking]=useState(false);
+  const navigationRef=useRef<ReaderNavigation|null>(null);
   const mobileGestureStart=useRef<{x:number;y:number}|null>(null);
   const suppressTapUntil=useRef(0);
   const progress=book.progress||0;
   const turn=(direction:'next'|'prev')=>navigationRef.current?.[direction]();
   useEffect(()=>setChapterInfo(null),[book.id]);
+  useEffect(()=>setSliderValue(book.progress||0),[book.id]);
+  useEffect(()=>{
+    if(!isSeeking)setSliderValue(progress);
+  },[progress,isSeeking]);
+
   useEffect(()=>{
     if(!chapterInfo?.title||typeof window==='undefined')return;
     try{
@@ -467,9 +493,16 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
 
   const pageWidth=settings.contentWidth>=1600?'100%':`min(100%, ${settings.contentWidth+settings.marginLeft+settings.marginRight}px)`;
 
+  const commitSeek=(next:number)=>{
+    setSliderValue(next);
+    setIsSeeking(false);
+    navigationRef.current?.seek?.(next);
+  };
+
   return <main className="reader-shell">
     <style>{`
       .mobile-page-zone{display:none}
+      .reader-progress-slider{margin-top:6px}
       .turn-zone:focus,
       .turn-zone:focus-visible,
       .mobile-page-zone:focus,
@@ -528,6 +561,6 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
       />
     </section>
 
-    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}{book.format==='epub'&&chapterInfo?.title?` · ${chapterInfo.title}${chapterInfo.remaining===0?' · конец главы':chapterInfo.remaining!==null?` · ещё ${chapterInfo.remaining} стр.`:''}`:''}</span><Progress value={progress} aria-label={`Прочитано ${progress}%`}/><b>{progress}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
+    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}{book.format==='epub'&&chapterInfo?.title?` · ${chapterInfo.title}${chapterInfo.remaining===0?' · конец главы':chapterInfo.remaining!==null?` · ещё ${chapterInfo.remaining} стр.`:''}`:''}</span><div className="reader-progress-slider"><Slider aria-label="Переход по книге" min={0} max={100} step={1} value={[sliderValue]} onValueChange={(next)=>{const value=Number(Array.isArray(next)?next[0]:next);setIsSeeking(true);setSliderValue(value);}} onValueCommit={(next)=>commitSeek(Number(Array.isArray(next)?next[0]:next))}/></div><b>{Math.round(isSeeking?sliderValue:progress)}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
   </main>;
 }
