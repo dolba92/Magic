@@ -495,41 +495,91 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
     if(book.format==='epub')seekRef.current?.(next);
   };
 
+  const seekPercentFromPointer=(event:React.PointerEvent<HTMLDivElement>)=>{
+    const rect=event.currentTarget.getBoundingClientRect();
+    if(rect.width<=0)return seekValue;
+    return Math.max(0,Math.min(100,((event.clientX-rect.left)/rect.width)*100));
+  };
+
+  const handleSeekPointerDown=(event:React.PointerEvent<HTMLDivElement>)=>{
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const value=seekPercentFromPointer(event);
+    setSeeking(true);
+    setSeekValue(value);
+  };
+
+  const handleSeekPointerMove=(event:React.PointerEvent<HTMLDivElement>)=>{
+    if(!seeking)return;
+    setSeekValue(seekPercentFromPointer(event));
+  };
+
+  const handleSeekPointerUp=(event:React.PointerEvent<HTMLDivElement>)=>{
+    if(!seeking)return;
+    event.preventDefault();
+    event.stopPropagation();
+    commitSeek(seekPercentFromPointer(event));
+  };
+
+  const handleSeekKeyDown=(event:React.KeyboardEvent<HTMLDivElement>)=>{
+    let next:number|null=null;
+    if(event.key==='ArrowLeft'||event.key==='ArrowDown')next=seekValue-1;
+    if(event.key==='ArrowRight'||event.key==='ArrowUp')next=seekValue+1;
+    if(event.key==='PageDown')next=seekValue-5;
+    if(event.key==='PageUp')next=seekValue+5;
+    if(event.key==='Home')next=0;
+    if(event.key==='End')next=100;
+    if(next===null)return;
+    event.preventDefault();
+    event.stopPropagation();
+    commitSeek(next);
+  };
+
   return <main className="reader-shell">
     <style>{`
       .mobile-page-zone{display:none}
-      .reader-seek-wrap{display:flex;align-items:center;width:100%;min-width:0}
-      .reader-seek{
-        --seek-value:0%;
-        width:100%;
-        height:24px;
-        margin:0;
-        padding:0;
-        appearance:none;
-        -webkit-appearance:none;
-        background:transparent;
-        cursor:pointer;
-        touch-action:none;
+      .reader-seek-wrap{display:flex;align-items:center;width:100%;min-width:0;margin-top:6px}
+      .reader-seek-track{
+        position:relative!important;
+        width:100%!important;
+        height:22px!important;
+        min-width:0!important;
+        cursor:pointer!important;
+        touch-action:none!important;
+        user-select:none!important;
+        -webkit-user-select:none!important;
       }
-      .reader-seek::-webkit-slider-runnable-track{
-        height:5px;
-        border-radius:999px;
-        background:linear-gradient(to right,#a8643f 0%,#a8643f var(--seek-value),#d9c9b8 var(--seek-value),#d9c9b8 100%);
+      .reader-seek-rail{
+        position:absolute!important;
+        left:0!important;right:0!important;top:50%!important;
+        height:5px!important;
+        transform:translateY(-50%)!important;
+        border-radius:999px!important;
+        background:#d9c9b8!important;
+        box-shadow:inset 0 1px 2px rgba(74,43,27,.10)!important;
+        pointer-events:none!important;
       }
-      .reader-seek::-webkit-slider-thumb{
-        -webkit-appearance:none;
-        width:16px;
-        height:16px;
-        margin-top:-5.5px;
-        border-radius:50%;
-        border:2px solid #fff8ee;
-        background:#a8643f;
-        box-shadow:0 1px 4px rgba(74,43,27,.35);
+      .reader-seek-fill{
+        position:absolute!important;
+        left:0!important;top:0!important;bottom:0!important;
+        border-radius:999px!important;
+        background:#a8643f!important;
+        pointer-events:none!important;
       }
-      .reader-seek::-moz-range-track{height:5px;border-radius:999px;background:#d9c9b8}
-      .reader-seek::-moz-range-progress{height:5px;border-radius:999px;background:#a8643f}
-      .reader-seek::-moz-range-thumb{width:16px;height:16px;border-radius:50%;border:2px solid #fff8ee;background:#a8643f;box-shadow:0 1px 4px rgba(74,43,27,.35)}
-      .reader-seek:focus-visible{outline:2px solid rgba(168,100,63,.45);outline-offset:2px;border-radius:999px}
+      .reader-seek-thumb{
+        position:absolute!important;
+        top:50%!important;
+        width:18px!important;height:18px!important;
+        transform:translate(-50%,-50%)!important;
+        border-radius:50%!important;
+        border:2px solid #fff8ee!important;
+        background:#a8643f!important;
+        box-shadow:0 1px 5px rgba(74,43,27,.38)!important;
+        pointer-events:none!important;
+        z-index:2!important;
+      }
+      .reader-seek-track:focus-visible{outline:2px solid rgba(168,100,63,.45)!important;outline-offset:2px!important;border-radius:999px!important}
       .turn-zone:focus,
       .turn-zone:focus-visible,
       .mobile-page-zone:focus,
@@ -588,6 +638,6 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
       />
     </section>
 
-    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}{book.format==='epub'&&chapterInfo?.title?` · ${chapterInfo.title}${chapterInfo.remaining===0?' · конец главы':chapterInfo.remaining!==null?` · ещё ${chapterInfo.remaining} стр.`:''}`:''}</span>{book.format==='epub'?<div className="reader-seek-wrap"><input className="reader-seek" type="range" min={0} max={100} step={1} value={seekValue} aria-label={`Перейти по книге, ${Math.round(seekValue)}%`} style={{['--seek-value' as string]:`${seekValue}%`}} onPointerDown={()=>setSeeking(true)} onChange={(event)=>{setSeeking(true);setSeekValue(Number(event.currentTarget.value))}} onPointerUp={(event)=>commitSeek(Number(event.currentTarget.value))} onPointerCancel={()=>{setSeeking(false);setSeekValue(progress)}} onKeyUp={(event)=>{if(['ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'].includes(event.key))commitSeek(Number(event.currentTarget.value))}} onBlur={(event)=>{if(seeking)commitSeek(Number(event.currentTarget.value))}}/></div>:<Progress value={progress} aria-label={`Прочитано ${progress}%`}/>}<b>{Math.round(book.format==='epub'&&seeking?seekValue:progress)}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
+    <footer className="reader-bottombar"><Button variant="ghost" size="icon-lg" aria-label="Предыдущая страница" onClick={()=>turn('prev')}><ChevronLeft/></Button><div><span>{visual.total>0?`${visual.label} ${visual.current} из ${visual.total}`:visual.label}{book.format==='epub'&&chapterInfo?.title?` · ${chapterInfo.title}${chapterInfo.remaining===0?' · конец главы':chapterInfo.remaining!==null?` · ещё ${chapterInfo.remaining} стр.`:''}`:''}</span>{book.format==='epub'?<div className="reader-seek-wrap"><div className="reader-seek-track" role="slider" tabIndex={0} aria-label="Переход по книге" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(seekValue)} onPointerDown={handleSeekPointerDown} onPointerMove={handleSeekPointerMove} onPointerUp={handleSeekPointerUp} onPointerCancel={()=>{setSeeking(false);setSeekValue(progress)}} onKeyDown={handleSeekKeyDown}><div className="reader-seek-rail"><div className="reader-seek-fill" style={{width:`${seekValue}%`}}/></div><span className="reader-seek-thumb" style={{left:`${seekValue}%`}}/></div></div>:<Progress value={progress} aria-label={`Прочитано ${progress}%`}/>}<b>{Math.round(book.format==='epub'&&seeking?seekValue:progress)}%</b></div><Button variant="ghost" size="icon-lg" aria-label="Следующая страница" onClick={()=>turn('next')}><ChevronRight/></Button></footer>
   </main>;
 }
