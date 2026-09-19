@@ -83,8 +83,77 @@ export function MagicApp() {
   if(readerBook)return <Reader book={readerBook} settings={readerSettings} onSettings={changeReaderSettings} onClose={()=>{readerBookRef.current=null;setReaderBook(null);void refresh()}} onProgress={(location,progress)=>updateProgress(readerBook.id,location,progress)} onEpubLocations={(locations)=>cacheEpubLocations(readerBook.id,locations)}/>;
   return <main className={`magic-shell ${dragging?'is-dragging':''}`} onDragOver={(e)=>{e.preventDefault();setDragging(true)}} onDragLeave={()=>setDragging(false)} onDrop={(e)=>{e.preventDefault();setDragging(false);void processFiles(Array.from(e.dataTransfer.files))}}>
     <style>{`
-      .magic-sidebar .magic-logo{display:block;width:154px;height:154px;max-width:78%;object-fit:contain;margin:6px auto 18px;border-radius:28px}\n      @media (max-width:820px){.magic-sidebar .magic-logo{width:118px;height:118px}}\n      .continue-reading-card{display:grid;grid-template-columns:108px minmax(0,1fr) auto;align-items:center;gap:22px;margin-bottom:18px;padding:18px 20px;border:1px solid rgba(122,82,58,.18);border-radius:24px;background:linear-gradient(135deg,rgba(255,250,240,.96),rgba(238,224,207,.92));box-shadow:0 14px 38px rgba(73,48,32,.10);overflow:hidden}
-      .dark .continue-reading-card{background:linear-gradient(135deg,rgba(49,42,37,.97),rgba(65,51,42,.95));border-color:rgba(255,255,255,.08)}
+      .magic-sidebar .magic-logo{display:block;width:154px;height:154px;max-width:78%;object-fit:contain;margin:6px auto 18px;border-radius:28px}\n      @media (max-width:820px){.magic-sidebar .magic-logo{width:118px;height:118px}}\n
+      /* Тёплое матовое стекло для Magic Books */
+      .glass-panel,
+      .continue-reading-card{
+        background:
+          linear-gradient(135deg,
+            rgba(246,224,208,.52) 0%,
+            rgba(229,193,169,.38) 46%,
+            rgba(202,155,125,.30) 100%) !important;
+        border:1px solid rgba(255,244,235,.52) !important;
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,.44),
+          0 12px 32px rgba(83,43,24,.14) !important;
+        -webkit-backdrop-filter:blur(22px) saturate(125%) !important;
+        backdrop-filter:blur(22px) saturate(125%) !important;
+      }
+
+      .magic-sidebar{
+        background:
+          linear-gradient(160deg,
+            rgba(244,224,212,.56) 0%,
+            rgba(224,190,169,.40) 55%,
+            rgba(199,150,120,.28) 100%) !important;
+      }
+
+      .library-header,
+      .library-controls,
+      .continue-reading-card,
+      .content-panel{
+        border-color:rgba(255,239,228,.48) !important;
+      }
+
+      .search-box,
+      .view-controls select,
+      .preference-grid select,
+      .theme-choice button{
+        background:rgba(255,242,233,.40) !important;
+        border-color:rgba(255,239,228,.42) !important;
+        -webkit-backdrop-filter:blur(12px) saturate(120%) !important;
+        backdrop-filter:blur(12px) saturate(120%) !important;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.30) !important;
+      }
+
+      .search-box input{
+        background:transparent !important;
+      }
+
+      .nav-item:not(.active){
+        background:transparent !important;
+      }
+
+      .nav-item.active,
+      .primary-action,
+      .continue-reading-action{
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,.18),
+          0 8px 20px rgba(83,43,24,.16) !important;
+      }
+
+      .dark .glass-panel,
+      .dark .continue-reading-card{
+        background:
+          linear-gradient(135deg,
+            rgba(74,52,42,.68),
+            rgba(88,58,43,.56),
+            rgba(58,39,32,.58)) !important;
+        border-color:rgba(255,255,255,.10) !important;
+      }
+
+      .continue-reading-card{display:grid;grid-template-columns:108px minmax(0,1fr) auto;align-items:center;gap:22px;margin-bottom:18px;padding:18px 20px;border:1px solid rgba(122,82,58,.18);border-radius:24px;background:transparent;box-shadow:0 14px 38px rgba(73,48,32,.10);overflow:hidden}
+      .dark .continue-reading-card{border-color:rgba(255,255,255,.10)}
       .continue-reading-cover{width:108px;aspect-ratio:2/3;border-radius:14px;overflow:hidden;background:rgba(122,82,58,.10);display:grid;place-items:center;box-shadow:0 8px 22px rgba(73,48,32,.16)}
       .continue-reading-cover img{width:100%;height:100%;object-fit:cover;display:block}
       .continue-reading-cover span{display:grid;place-items:center;gap:6px;text-align:center;font-size:11px;opacity:.7;padding:8px}
