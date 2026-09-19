@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Slider } from '@/components/ui/slider';
 import { Fb2SurfaceStable } from '@/features/reader/Fb2Surface';
 import { toReadingPercent } from '@/lib/books/progress';
+import { db } from '@/lib/storage/db';
 import type { BookRecord, ReaderLocation, ReaderSettings, TocItem } from '@/types/books';
 
 type Props = {
@@ -129,6 +130,72 @@ function epubLayoutKey(settings:ReaderSettings, width:number, height:number) {
   return [width,height,epubColumnCount(settings,width),settings.fontFamily,settings.fontSize,settings.fontWeight,settings.lineHeight,settings.paragraphSpacing,settings.textIndent,settings.imageScale].join(':');
 }
 
+function withTimeout<T>(promise:Promise<T>, timeoutMs:number, label:string):Promise<T> {
+  return new Promise<T>((resolve,reject)=>{
+    const timer=window.setTimeout(()=>reject(new Error(`${label}: timeout`)),timeoutMs);
+    promise.then((value)=>{window.clearTimeout(timer);resolve(value)},(error)=>{window.clearTimeout(timer);reject(error)});
+  });
+}
+
+function readBlobWithFileReader(blob:Blob):Promise<ArrayBuffer> {
+  return new Promise<ArrayBuffer>((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{
+      if(reader.result instanceof ArrayBuffer)resolve(reader.result);
+      else reject(new Error('FileReader did not return ArrayBuffer'));
+    };
+    reader.onerror=()=>reject(reader.error||new Error('FileReader failed'));
+    reader.onabort=()=>reject(new Error('FileReader aborted'));
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+
+async function readFreshStoredBook(fallback:BookRecord):Promise<BookRecord> {
+  let lastError:unknown;
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      if(!db.isOpen())await withTimeout(Promise.resolve(db.open()),5000,'IndexedDB open');
+      const stored=await withTimeout(Promise.resolve(db.books.get(fallback.id)),5000,'IndexedDB book read');
+      if(stored)return stored as BookRecord;
+      return fallback;
+    }catch(error){
+      lastError=error;
+      console.warn('IndexedDB book read retry:',error);
+      try{db.close()}catch{}
+      if(attempt<2)await new Promise<void>((resolve)=>window.setTimeout(resolve,180*(attempt+1)));
+    }
+  }
+  console.warn('IndexedDB fresh read failed, using in-memory book record:',lastError);
+  return fallback;
+}
+
+async function readStoredBookBytes(source:unknown):Promise<ArrayBuffer> {
+  if(source instanceof ArrayBuffer)return source.slice(0);
+  if(ArrayBuffer.isView(source))return source.buffer.slice(source.byteOffset,source.byteOffset+source.byteLength) as ArrayBuffer;
+  if(!(source instanceof Blob))throw new Error('Сохранённый файл книги имеет неподдерживаемый формат');
+
+  const fresh=source.slice(0,source.size,source.type);
+  let lastError:unknown;
+  const attempts:Array<()=>Promise<ArrayBuffer>>=[
+    ()=>withTimeout(fresh.arrayBuffer(),6000,'Blob.arrayBuffer'),
+    ()=>withTimeout(readBlobWithFileReader(fresh),8000,'FileReader'),
+    ()=>withTimeout(new Response(fresh).arrayBuffer(),8000,'Response.arrayBuffer'),
+  ];
+
+  for(const attempt of attempts){
+    try{
+      const bytes=await attempt();
+      if(bytes.byteLength>0)return bytes;
+      lastError=new Error('Файл книги пуст');
+    }catch(error){
+      lastError=error;
+      console.warn('EPUB stored file read retry:',error);
+    }
+  }
+  throw lastError instanceof Error?lastError:new Error('Не удалось прочитать сохранённый файл книги');
+}
+
 function ImageZoomOverlay({image,onClose}:{image:{src:string;alt:string};onClose:()=>void}) {
   const [zoom,setZoom]=useState(0);
   useEffect(()=>setZoom(0),[image.src]);
@@ -152,17 +219,29 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
   const host = useRef<HTMLDivElement>(null); const bookRef = useRef<any>(null); const renditionRef = useRef<any>(null);
   const settingsRef = useRef(settings); const progressRef = useRef(onProgress); const visualRef = useRef(onVisual); const cacheRef = useRef(onEpubLocations);
   settingsRef.current = settings; progressRef.current = onProgress; visualRef.current = onVisual; cacheRef.current = onEpubLocations;
-  const [ready,setReady]=useState(false); const [zoomImage,setZoomImage]=useState<{src:string;alt:string}|null>(null);const zoomOpenRef=useRef(false);
+  const [ready,setReady]=useState(false); const [openError,setOpenError]=useState(''); const [retryKey,setRetryKey]=useState(0);
+  const [zoomImage,setZoomImage]=useState<{src:string;alt:string}|null>(null);const zoomOpenRef=useRef(false);
   const pageMapRef=useRef<{key:string;counts:number[];chapters:Array<{page:number;label:string}>}|null>(null); const mapVersionRef=useRef(0);
-  const rebuildMapRef=useRef<(()=>void)|null>(null);
+  const rebuildMapRef=useRef<(()=>void)|null>(null); const bytesRef=useRef<ArrayBuffer|null>(null);
 
   useEffect(() => {
     let active = true; let resizeFrame = 0; let generationTimer = 0; let idleId = 0; let mapTimer=0; let observer: ResizeObserver | undefined; let navigationQueue=Promise.resolve();
+    setReady(false);setOpenError('');bytesRef.current=null;
     (async () => {
       if (!host.current) return;
       const { default: ePub } = await import('epubjs');
-      const instance = ePub(await book.file.arrayBuffer()); bookRef.current = instance; await instance.ready;
-      if (book.epubLocations) { try { instance.locations.load(book.epubLocations); } catch (error) { console.error('EPUB locations cache:', error); } }
+      const storedBook=await readFreshStoredBook(book);
+      if(!active)return;
+      const sourceFile=storedBook.file||book.file;
+      const sourceLocation=storedBook.location||book.location;
+      const sourceProgress=typeof storedBook.progress==='number'?storedBook.progress:(book.progress||0);
+      const sourceLocations=storedBook.epubLocations||book.epubLocations;
+      const sourceToc=storedBook.toc||book.toc;
+      const bytes=await readStoredBookBytes(sourceFile);
+      if(!active)return;
+      bytesRef.current=bytes;
+      const instance = ePub(bytes.slice(0)); bookRef.current = instance; await withTimeout(Promise.resolve(instance.ready),10000,'EPUB ready');
+      if (sourceLocations) { try { instance.locations.load(sourceLocations); } catch (error) { console.error('EPUB locations cache:', error); } }
       if (!active || !host.current) return;
       const rendition = instance.renderTo(host.current, { width: host.current.clientWidth, height: host.current.clientHeight, flow: 'paginated', spread: epubSpread(settingsRef.current,host.current.clientWidth), manager: 'default', allowScriptedContent: false });
       renditionRef.current = rendition;
@@ -223,7 +302,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
         if(!map||map.key!==key||spinePosition<0){
           onChapterInfo(null);
           visualRef.current({current:0,total:0,label:'Пересчитываем страницы…'});
-          progressRef.current({kind:'epub',cfi:location.start.cfi},book.progress||0);
+          progressRef.current({kind:'epub',cfi:location.start.cfi},sourceProgress||0);
           return;
         }
         const localPage=Math.max(1,Math.floor(((Number(location.start.displayed?.page)||1)-1)/columns)+1);
@@ -247,7 +326,9 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
           Object.assign(measureHost.style,{position:'fixed',left:'-100000px',top:'0',width:`${width}px`,height:`${height}px`,visibility:'hidden',pointerEvents:'none'});document.body.appendChild(measureHost);
           let measureBook:any;let measureRendition:any;
           try{
-            measureBook=ePub(await book.file.arrayBuffer());await measureBook.ready;if(!active||version!==mapVersionRef.current)return;
+            const sourceBytes=bytesRef.current||await readStoredBookBytes(book.file);
+            if(!bytesRef.current)bytesRef.current=sourceBytes;
+            measureBook=ePub(sourceBytes.slice(0));await measureBook.ready;if(!active||version!==mapVersionRef.current)return;
             measureRendition=measureBook.renderTo(measureHost,{width,height,flow:'paginated',spread:epubSpread(measuredSettings,width),manager:'default',allowScriptedContent:false});
             applyEpubSettings(measureRendition,measuredSettings);
             measureRendition.hooks.content.register(async(contents:any)=>{await contents.addStylesheet('/reader-fonts.css');applyEpubContent(contents,measuredSettings);await contents.document?.fonts?.ready});
@@ -261,7 +342,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
 
             // EPUB-файл (spine item) может содержать сразу несколько настоящих глав.
             // Поэтому границы глав берём из оглавления, а не из displayed.total текущего spine item.
-            const tocTargets=flattenToc(book.toc||[])
+            const tocTargets=flattenToc(sourceToc||[])
               .map(({item})=>({target:item.href||item.sectionId||'',label:(item.label||'').trim()}))
               .filter(({target,label})=>Boolean(target&&label));
             const chapterPages=new Map<number,string>();
@@ -299,7 +380,29 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
         }
         syncZoom();
       }, 0));
-      await rendition.display(book.location?.kind === 'epub' ? book.location.cfi : undefined);
+      const savedCfi=sourceLocation?.kind==='epub'?sourceLocation.cfi:undefined;
+      if(savedCfi&&retryKey===0){
+        try{
+          await withTimeout(Promise.resolve(rendition.display(savedCfi)),8000,'EPUB saved position');
+        }catch(error){
+          console.warn('EPUB saved position failed, retrying from progress:',error);
+          if(active)setRetryKey(1);
+          return;
+        }
+      }else{
+        let fallbackCfi:string|undefined;
+        if(sourceProgress>0){
+          try{fallbackCfi=instance.locations?.cfiFromPercentage?.(Math.max(0,Math.min(100,sourceProgress))/100)}catch(error){console.warn('EPUB progress fallback CFI:',error)}
+        }
+        try{
+          await withTimeout(Promise.resolve(rendition.display(fallbackCfi)),10000,'EPUB display');
+        }catch(error){
+          if(fallbackCfi){
+            console.warn('EPUB progress position failed, opening first page:',error);
+            await withTimeout(Promise.resolve(rendition.display()),10000,'EPUB first page');
+          }else throw error;
+        }
+      }
       if (!active) return;
       window.setTimeout(() => {
         if (!active) return;
@@ -321,7 +424,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
         });
       });
       observer.observe(host.current);
-      if (!book.epubLocations) {
+      if (!sourceLocations) {
         generationTimer = window.setTimeout(() => {
           const generate = async () => {
             try {
@@ -335,12 +438,15 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
           else void generate();
         }, 2500);
       } else report(rendition.currentLocation());
-    })().catch((error) => console.error('EPUB reader:', error));
+    })().catch((error) => {
+      console.error('EPUB reader:', error);
+      if(active)setOpenError('Не удалось открыть сохранённую книгу. Нажмите «Повторить» — удалять книгу из библиотеки не нужно.');
+    });
     return () => {
       active = false; clearTimeout(generationTimer);clearTimeout(mapTimer);mapVersionRef.current++;rebuildMapRef.current=null;if (idleId && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
       cancelAnimationFrame(resizeFrame); observer?.disconnect(); navigationRef.current = null; seekRef.current=null; renditionRef.current?.destroy(); bookRef.current?.destroy();
     };
-  }, [book.id]);
+  }, [book.id,retryKey]);
 
   useEffect(() => {
     const rendition = renditionRef.current; if (!rendition || !host.current) return;
@@ -357,7 +463,12 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
     return () => clearTimeout(timer);
   }, [settings]);
   const palette=readerColors(settings);
-  return <div className="epub-surface-wrap" style={{boxSizing:'border-box',padding:`${settings.marginTop}px ${settings.marginRight}px ${settings.marginBottom}px ${settings.marginLeft}px`,background:palette.bg}}><div ref={host} className="epub-surface" aria-label="Текст книги" />{!ready&&<output className="reader-loading" aria-live="polite">Открываем книгу…</output>}{zoomImage&&<ImageZoomOverlay image={zoomImage} onClose={()=>{zoomOpenRef.current=false;setZoomImage(null)}}/>}</div>;
+  return <div className="epub-surface-wrap" style={{boxSizing:'border-box',padding:`${settings.marginTop}px ${settings.marginRight}px ${settings.marginBottom}px ${settings.marginLeft}px`,background:palette.bg}}>
+    <div ref={host} className="epub-surface" aria-label="Текст книги" />
+    {!ready&&!openError&&<output className="reader-loading" aria-live="polite">Открываем книгу…</output>}
+    {openError&&<div className="reader-loading" role="alert" style={{display:'grid',gap:12,justifyItems:'center',textAlign:'center',maxWidth:360}}><span>{openError}</span><Button variant="secondary" onClick={()=>setRetryKey((value)=>value+1)}>Повторить</Button></div>}
+    {zoomImage&&<ImageZoomOverlay image={zoomImage} onClose={()=>{zoomOpenRef.current=false;setZoomImage(null)}}/>}
+  </div>;
 }
 
 // oxlint-disable-next-line no-unused-vars
