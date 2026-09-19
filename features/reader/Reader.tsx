@@ -26,10 +26,28 @@ const themes: Record<string, { label: string; bg: string; text: string }> = {
 };
 
 const fonts = [
-  ['Literata', 'С засечками'], ['PT Serif', 'С засечками'], ['Merriweather', 'С засечками'], ['Source Serif 4', 'С засечками'],
-  ['Bitter', 'С засечками'], ['Lora', 'С засечками'], ['Lora Hand', 'Книжно-рукописный'], ['Noto Serif', 'С засечками'], ['Georgia', 'С засечками'],
+  ['Literata', 'Книжный'], ['PT Serif', 'Классический'], ['Merriweather', 'Книжный'], ['Source Serif 4', 'Книжный'],
+  ['Bitter', 'Характерный'], ['Lora', 'Книжный'], ['Lora Hand', 'Книжно-рукописный'],
+  ['Bad Script', 'Рукописный'], ['Marck Script', 'Каллиграфический'], ['Caveat', 'Рукописный'], ['Neucha', 'Рукописный'], ['Pangolin', 'Рукописный'],
+  ['Alice', 'Сказочный'], ['Cormorant Garamond', 'Элегантный'], ['Forum', 'Винтажный'],
+  ['Noto Serif', 'Классический'], ['Georgia', 'Классический'],
   ['Manrope', 'Без засечек'], ['Open Sans', 'Без засечек'], ['Verdana', 'Без засечек'], ['Arial', 'Без засечек'],
 ] as const;
+
+const handwrittenFonts = new Set(['Lora Hand','Bad Script','Marck Script','Caveat','Neucha','Pangolin']);
+const singleWeightFonts = new Set(['Lora Hand','Bad Script','Marck Script','Neucha','Pangolin','Alice','Forum']);
+const sansFonts = new Set(['Manrope','Open Sans','Verdana','Arial']);
+
+function readerFontFallback(family:string) {
+  if(handwrittenFonts.has(family))return 'cursive';
+  if(sansFonts.has(family))return 'sans-serif';
+  return 'serif';
+}
+
+function readerFontStack(family:string) {
+  const safe=String(family).replace(/[\"']/g,'');
+  return `"${safe}", ${readerFontFallback(safe)}`;
+}
 
 function readerColors(settings: ReaderSettings) {
   return settings.theme === 'custom' ? { bg: settings.customBackground, text: settings.customText } : themes[settings.theme] || themes.cream;
@@ -43,7 +61,7 @@ function ReaderSettingsPanel({ value, onChange }: { value: ReaderSettings; onCha
   const patch = (next: Partial<ReaderSettings>) => onChange({ ...value, ...next });
   return <div className="reader-settings-scroll">
     <details open><summary>Текст</summary><div className="settings-group">
-      <label className="field-label">Шрифт<select value={value.fontFamily} onChange={(e) => patch({ fontFamily: e.target.value })}>{fonts.map(([font, group]) => <option key={font} value={font}>{font} · {group}</option>)}</select></label>
+      <label className="field-label">Шрифт<select value={value.fontFamily} onChange={(e) => { const fontFamily=e.target.value; patch({ fontFamily, ...(singleWeightFonts.has(fontFamily)?{fontWeight:400}:{}) }); }}>{fonts.map(([font, group]) => <option key={font} value={font}>{font} · {group}</option>)}</select></label>
       <SettingRange label="Размер" value={value.fontSize} min={12} max={36} suffix=" px" onChange={(fontSize) => patch({ fontSize })} />
       <label className="field-label">Жирность<select value={value.fontWeight} onChange={(e) => patch({ fontWeight: Number(e.target.value) })}>{[300,400,500,600,700].map((weight) => <option key={weight}>{weight}</option>)}</select></label>
       <label className="field-label">Выравнивание<select value={value.alignment} onChange={(e) => patch({ alignment: e.target.value as ReaderSettings['alignment'] })}><option value="left">По левому краю</option><option value="justify">По ширине</option><option value="center">По центру</option></select></label>
@@ -81,7 +99,7 @@ function epubRules(settings: ReaderSettings) {
     'html body': {
       margin: '0 !important',
       'box-sizing': 'border-box !important', background: `${colors.bg} !important`, color: `${colors.text} !important`,
-      'font-family': `${settings.fontFamily}, serif !important`, 'font-size': `${settings.fontSize}px !important`,
+      'font-family': `${readerFontStack(settings.fontFamily)} !important`, 'font-size': `${settings.fontSize}px !important`,
       'font-weight': `${settings.fontWeight} !important`, 'line-height': `${settings.lineHeight} !important`, 'text-align': `${settings.alignment} !important`,
       'overflow-wrap': 'anywhere !important', 'word-break': 'normal !important',
     },
@@ -104,7 +122,7 @@ function applyEpubSettings(rendition:any, settings:ReaderSettings) {
   const palette=readerColors(settings); rendition.themes.default(epubRules(settings));
   const overrides:Record<string,string>={
     margin:'0px',
-    'font-family':`${settings.fontFamily}, serif`, 'font-size':`${settings.fontSize}px`, 'font-weight':String(settings.fontWeight),
+    'font-family':readerFontStack(settings.fontFamily), 'font-size':`${settings.fontSize}px`, 'font-weight':String(settings.fontWeight),
     'line-height':String(settings.lineHeight), 'text-align':settings.alignment, color:palette.text, background:palette.bg,
   };
   for(const [property,value] of Object.entries(overrides))rendition.themes.override(property,value,true);
@@ -113,7 +131,7 @@ function applyEpubSettings(rendition:any, settings:ReaderSettings) {
 function applyEpubContent(contents:any, settings:ReaderSettings) {
   const palette=readerColors(settings); const values:Record<string,string>={
     margin:'0px',
-    'font-family':`"${settings.fontFamily}", serif`,'font-size':`${settings.fontSize}px`,'font-weight':String(settings.fontWeight),
+    'font-family':readerFontStack(settings.fontFamily),'font-size':`${settings.fontSize}px`,'font-weight':String(settings.fontWeight),
     'line-height':String(settings.lineHeight),'text-align':settings.alignment,color:palette.text,background:palette.bg,
   };
   for(const [property,value] of Object.entries(values))contents.css(property,value,true);
@@ -125,7 +143,7 @@ function applyEpubContent(contents:any, settings:ReaderSettings) {
   const documentRef=contents?.document as Document|undefined;
   if(!documentRef)return;
   const family=String(settings.fontFamily).replace(/[\\"']/g,'');
-  const forcedFamily=`"${family}", serif`;
+  const forcedFamily=readerFontStack(family);
   documentRef.documentElement?.style?.setProperty('font-family',forcedFamily,'important');
   documentRef.body?.style?.setProperty('font-family',forcedFamily,'important');
   for(const element of Array.from(documentRef.body?.querySelectorAll('*')||[]) as HTMLElement[]){
@@ -161,64 +179,93 @@ function ensureReaderFonts(contents:any):Promise<void> {
   });
 }
 
-async function ensureLoraHandFontFaces(contents:any):Promise<void> {
-  const documentRef=contents?.document as Document|undefined;
-  const fonts=documentRef?.fonts;
-  if(!documentRef||!fonts||typeof FontFace==='undefined')return;
+type ReaderWebFont = {
+  family:string;
+  id?:string;
+  weight?:string;
+  local?:boolean;
+};
 
-  // A new EPUB spine item is rendered in a fresh iframe. Relying only on a linked
-  // stylesheet can leave that iframe on the serif fallback if the face itself has
-  // not finished loading. Install the actual Lora Hand font faces into every iframe.
-  if(documentRef.documentElement?.dataset.magicLoraHand==='ready'){
-    try{if(fonts.check('400 18px "Lora Hand"'))return}catch{}
+const readerWebFonts:Record<string,ReaderWebFont>={
+  'Lora Hand':{family:'Lora Hand',local:true,weight:'400'},
+  'Bad Script':{family:'Bad Script',id:'bad-script',weight:'400'},
+  'Marck Script':{family:'Marck Script',id:'marck-script',weight:'400'},
+  'Caveat':{family:'Caveat',id:'caveat',weight:'400'},
+  'Neucha':{family:'Neucha',id:'neucha',weight:'400'},
+  'Pangolin':{family:'Pangolin',id:'pangolin',weight:'400'},
+  'Alice':{family:'Alice',id:'alice',weight:'400'},
+  'Cormorant Garamond':{family:'Cormorant Garamond',id:'cormorant-garamond',weight:'400'},
+  'Forum':{family:'Forum',id:'forum',weight:'400'},
+};
+
+const readerFontReady=new WeakMap<Document,Set<string>>();
+const CYRILLIC_RANGE='U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116';
+const LATIN_RANGE='U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
+
+function readerFontFaceUrls(definition:ReaderWebFont) {
+  if(definition.local){
+    const origin=window.location.origin;
+    return [
+      [`${origin}/reader-fonts/lora-cyrillic-400-italic.woff2`,CYRILLIC_RANGE],
+      [`${origin}/reader-fonts/lora-latin-400-italic.woff2`,LATIN_RANGE],
+    ] as const;
   }
-
-  const origin=window.location.origin;
-  const definitions=[
-    ['/reader-fonts/lora-cyrillic-ext-400-italic.woff2','U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F'],
-    ['/reader-fonts/lora-cyrillic-400-italic.woff2','U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116'],
-    ['/reader-fonts/lora-latin-ext-400-italic.woff2','U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF'],
-    ['/reader-fonts/lora-latin-400-italic.woff2','U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD'],
+  const id=definition.id!;
+  const base=`https://cdn.jsdelivr.net/fontsource/fonts/${id}@5.3.0`;
+  return [
+    [`${base}/cyrillic-400-normal.woff2`,CYRILLIC_RANGE],
+    [`${base}/latin-400-normal.woff2`,LATIN_RANGE],
   ] as const;
+}
+
+async function ensureNamedReaderFontFaces(documentRef:Document|undefined, family:string):Promise<void> {
+  const definition=readerWebFonts[family];
+  const fonts=documentRef?.fonts;
+  const view=documentRef?.defaultView;
+  const FontFaceCtor=view?.FontFace||window.FontFace;
+  if(!definition||!documentRef||!fonts||!FontFaceCtor)return;
+
+  let ready=readerFontReady.get(documentRef);
+  if(!ready){ready=new Set<string>();readerFontReady.set(documentRef,ready)}
+  if(ready.has(family))return;
 
   let loadedAny=false;
-  for(const [path,unicodeRange] of definitions){
+  for(const [url,unicodeRange] of readerFontFaceUrls(definition)){
     try{
-      const face=new FontFace('Lora Hand',`url("${origin}${path}") format("woff2")`,{
-        style:'normal',
-        weight:'400',
-        unicodeRange,
+      const face=new FontFaceCtor(definition.family,`url("${url}") format("woff2")`,{
+        style:'normal',weight:definition.weight||'400',unicodeRange,
       });
       const loaded=await Promise.race([
         face.load(),
-        new Promise<never>((_,reject)=>window.setTimeout(()=>reject(new Error('Lora Hand face timeout')),3500)),
+        new Promise<never>((_,reject)=>window.setTimeout(()=>reject(new Error(`${family} face timeout`)),4500)),
       ]);
       fonts.add(loaded);
       loadedAny=true;
     }catch(error){
-      console.warn('EPUB Lora Hand face:',path,error);
+      console.warn(`Reader font ${family}:`,url,error);
     }
   }
 
   if(loadedAny){
-    try{await Promise.race([fonts.load('400 18px "Lora Hand"'),new Promise<void>((resolve)=>window.setTimeout(resolve,1200))])}catch{}
-    if(documentRef.documentElement)documentRef.documentElement.dataset.magicLoraHand='ready';
+    try{await Promise.race([fonts.load(`400 18px "${family}"`),new Promise<void>((resolve)=>window.setTimeout(resolve,1400))])}catch{}
+    ready.add(family);
   }
 }
 
 async function prepareEpubContent(contents:any, settings:ReaderSettings) {
-  // Every EPUB chapter is rendered in its own iframe. Load the reader stylesheet,
-  // then explicitly install Lora Hand into that iframe before applying the styles.
+  // Every EPUB chapter is rendered in its own iframe. Load the shared stylesheet,
+  // then install any extra reader font directly into that iframe before styling it.
   await ensureReaderFonts(contents);
-  if(settings.fontFamily==='Lora Hand')await ensureLoraHandFontFaces(contents);
+  await ensureNamedReaderFontFaces(contents?.document as Document|undefined,settings.fontFamily);
   applyEpubContent(contents,settings);
 
   try{
     const fonts=contents?.document?.fonts;
     if(fonts?.load){
+      const loadWeight=readerWebFonts[settings.fontFamily]?.weight||String(settings.fontWeight);
       await Promise.race([
-        fonts.load(`${settings.fontWeight} ${settings.fontSize}px "${settings.fontFamily}"`),
-        new Promise<void>((resolve)=>window.setTimeout(resolve,2000)),
+        fonts.load(`${loadWeight} ${settings.fontSize}px "${settings.fontFamily}"`),
+        new Promise<void>((resolve)=>window.setTimeout(resolve,2200)),
       ]);
     }
   }catch(error){
@@ -655,7 +702,7 @@ function LegacyFb2Surface({ book, settings, page, setPage, onProgress, onVisual,
   const colors=readerColors(settings); const imageHeight=settings.imageScale==='compact'?Math.round(contentHeight*.62):settings.imageScale==='large'?contentHeight:Math.round(contentHeight*.82);
   return <div ref={viewport} className="fb2-viewport" style={{background:colors.bg}}><article ref={article} className="fb2-columns" style={{
     top, height:contentHeight, width:textWidth, transform:`translateX(${left-page*pageWidth}px)`, columnWidth:textWidth, columnGap:gap,
-    color:colors.text,background:colors.bg,fontFamily:settings.fontFamily,fontSize:settings.fontSize,fontWeight:settings.fontWeight,lineHeight:settings.lineHeight,textAlign:settings.alignment,maxWidth:'none',
+    color:colors.text,background:colors.bg,fontFamily:readerFontStack(settings.fontFamily),fontSize:settings.fontSize,fontWeight:settings.fontWeight,lineHeight:settings.lineHeight,textAlign:settings.alignment,maxWidth:'none',
     ['--paragraph-gap' as string]:`${settings.paragraphSpacing}px`,['--text-indent' as string]:`${settings.textIndent}px`,['--image-height' as string]:`${imageHeight}px`,
   }} dangerouslySetInnerHTML={{__html:prepared.html}} />{!laidOut&&<output className="reader-loading" aria-live="polite">Подготавливаем страницы…</output>}</div>;
 }
@@ -674,6 +721,10 @@ export function Reader({ book, settings, onSettings, onClose, onProgress, onEpub
   useEffect(()=>setChapterInfo(null),[book.id]);
   useEffect(()=>{setSeekValue(book.progress||0);setSeeking(false)},[book.id]);
   useEffect(()=>{if(!seeking)setSeekValue(progress)},[progress,seeking]);
+  useEffect(()=>{
+    if(typeof document==='undefined')return;
+    void ensureNamedReaderFontFaces(document,settings.fontFamily);
+  },[settings.fontFamily]);
   useEffect(()=>{
     if(!chapterInfo?.title||typeof window==='undefined')return;
     try{
