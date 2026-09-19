@@ -113,15 +113,68 @@ function applyEpubSettings(rendition:any, settings:ReaderSettings) {
 function applyEpubContent(contents:any, settings:ReaderSettings) {
   const palette=readerColors(settings); const values:Record<string,string>={
     margin:'0px',
-    'font-family':`${settings.fontFamily}, serif`,'font-size':`${settings.fontSize}px`,'font-weight':String(settings.fontWeight),
+    'font-family':`"${settings.fontFamily}", serif`,'font-size':`${settings.fontSize}px`,'font-weight':String(settings.fontWeight),
     'line-height':String(settings.lineHeight),'text-align':settings.alignment,color:palette.text,background:palette.bg,
   };
   for(const [property,value] of Object.entries(values))contents.css(property,value,true);
 }
 
+function ensureReaderFonts(contents:any):Promise<void> {
+  const documentRef=contents?.document as Document|undefined;
+  const head=documentRef?.head;
+  if(!documentRef||!head)return Promise.resolve();
+
+  const existing=documentRef.querySelector('link[data-magic-reader-fonts="true"]') as HTMLLinkElement|null;
+  if(existing?.sheet)return Promise.resolve();
+
+  return new Promise<void>((resolve)=>{
+    const link=existing||documentRef.createElement('link');
+    let finished=false;
+    const done=()=>{if(finished)return;finished=true;resolve()};
+    const timer=window.setTimeout(done,2500);
+    const finish=()=>{window.clearTimeout(timer);done()};
+
+    link.addEventListener('load',finish,{once:true});
+    link.addEventListener('error',finish,{once:true});
+    if(!existing){
+      link.rel='stylesheet';
+      link.href=`${window.location.origin}/reader-fonts.css`;
+      link.dataset.magicReaderFonts='true';
+      head.appendChild(link);
+    }
+  });
+}
+
+async function prepareEpubContent(contents:any, settings:ReaderSettings) {
+  // Every EPUB chapter is rendered in its own iframe. The font stylesheet must
+  // therefore be loaded inside every new iframe before the selected font is applied.
+  await ensureReaderFonts(contents);
+  applyEpubContent(contents,settings);
+
+  try{
+    const fonts=contents?.document?.fonts;
+    if(fonts?.load){
+      await Promise.race([
+        fonts.load(`${settings.fontWeight} ${settings.fontSize}px "${settings.fontFamily}"`),
+        new Promise<void>((resolve)=>window.setTimeout(resolve,2000)),
+      ]);
+    }
+  }catch(error){
+    console.warn('EPUB reader font load:',error);
+  }
+
+  // Re-apply after the webfont finishes loading so EPUB styles cannot win the cascade.
+  applyEpubContent(contents,settings);
+}
+
 function applyAllEpubContent(rendition:any, settings:ReaderSettings) {
   const current = rendition.getContents() as any;
-  for (const contents of Array.isArray(current) ? current : [current]) if (contents) applyEpubContent(contents, settings);
+  for (const contents of Array.isArray(current) ? current : [current]) {
+    if(contents){
+      applyEpubContent(contents,settings);
+      void prepareEpubContent(contents,settings);
+    }
+  }
 }
 
 function epubSpread(settings:ReaderSettings, width:number) { return (settings.pageColumns||1)===2&&width>=760?'always':'none'; }
@@ -280,7 +333,10 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
           if(src)setZoomImage({src,alt:selected?.alt||'Иллюстрация книги'});else{zoomOpenRef.current=false;setZoomImage(null)}
         },60);
       };
-      rendition.hooks.content.register((contents:any) => { void contents.addStylesheet('/reader-fonts.css'); applyEpubContent(contents,settingsRef.current); wireImages(contents); });
+      rendition.hooks.content.register(async(contents:any) => {
+        await prepareEpubContent(contents,settingsRef.current);
+        wireImages(contents);
+      });
       const enqueue=(action:()=>Promise<unknown>)=>{navigationQueue=navigationQueue.then(async()=>{await action()}).catch((error)=>console.error('EPUB navigation:',error));};
       navigationRef.current = { next:()=>enqueue(()=>rendition.next()), prev:()=>enqueue(()=>rendition.prev()), display:(target)=>enqueue(()=>rendition.display(target)) };
       seekRef.current=(percent)=>{
@@ -339,7 +395,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
             measureBook=ePub(sourceBytes.slice(0));await measureBook.ready;if(!active||version!==mapVersionRef.current)return;
             measureRendition=measureBook.renderTo(measureHost,{width,height,flow:'paginated',spread:epubSpread(measuredSettings,width),manager:'default',allowScriptedContent:false});
             applyEpubSettings(measureRendition,measuredSettings);
-            measureRendition.hooks.content.register(async(contents:any)=>{await contents.addStylesheet('/reader-fonts.css');applyEpubContent(contents,measuredSettings);await contents.document?.fonts?.ready});
+            measureRendition.hooks.content.register(async(contents:any)=>{await prepareEpubContent(contents,measuredSettings);await contents.document?.fonts?.ready});
             const measureSpine=((((measureBook.spine as any)?.spineItems)||[]) as any[]).filter((item)=>item.linear!=='no');const counts:number[]=[];
             for(const item of measureSpine){
               if(!active||version!==mapVersionRef.current)return;
@@ -384,7 +440,11 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
         if (!active) return;
         const renderedContents = rendition.getContents() as any;
         for (const contents of Array.isArray(renderedContents) ? renderedContents : [renderedContents]) {
-          if (contents) { applyEpubContent(contents, settingsRef.current); wireImages(contents); }
+          if(contents){
+            applyEpubContent(contents,settingsRef.current);
+            void prepareEpubContent(contents,settingsRef.current);
+            wireImages(contents);
+          }
         }
         syncZoom();
       }, 0));
@@ -412,13 +472,10 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
         }
       }
       if (!active) return;
-      window.setTimeout(() => {
-        if (!active) return;
-        const displayedContents = rendition.getContents() as any;
-        for (const contents of Array.isArray(displayedContents) ? displayedContents : [displayedContents]) {
-          if (contents) applyEpubContent(contents, settingsRef.current);
-        }
-      }, 50);
+      const displayedContents=rendition.getContents() as any;
+      const currentContents=(Array.isArray(displayedContents)?displayedContents:[displayedContents]).filter(Boolean);
+      await Promise.all(currentContents.map((contents:any)=>prepareEpubContent(contents,settingsRef.current)));
+      if(!active)return;
       setReady(true);
       scheduleMap();
       observer = new ResizeObserver(() => {
