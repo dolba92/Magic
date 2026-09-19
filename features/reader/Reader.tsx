@@ -117,6 +117,22 @@ function applyEpubContent(contents:any, settings:ReaderSettings) {
     'line-height':String(settings.lineHeight),'text-align':settings.alignment,color:palette.text,background:palette.bg,
   };
   for(const [property,value] of Object.entries(values))contents.css(property,value,true);
+
+  // EPUB styles can set their own font-family on individual paragraphs/spans.
+  // That can make the selected reader font disappear several pages later even
+  // though the setting itself still says "Lora Hand". Force only the font
+  // family inline with !important so the book cannot override it.
+  const documentRef=contents?.document as Document|undefined;
+  if(!documentRef)return;
+  const family=String(settings.fontFamily).replace(/[\\"']/g,'');
+  const forcedFamily=`"${family}", serif`;
+  documentRef.documentElement?.style?.setProperty('font-family',forcedFamily,'important');
+  documentRef.body?.style?.setProperty('font-family',forcedFamily,'important');
+  for(const element of Array.from(documentRef.body?.querySelectorAll('*')||[]) as HTMLElement[]){
+    const tag=element.tagName?.toLowerCase();
+    if(tag==='svg'||tag==='path'||tag==='img'||tag==='video'||tag==='canvas')continue;
+    element.style?.setProperty('font-family',forcedFamily,'important');
+  }
 }
 
 function ensureReaderFonts(contents:any):Promise<void> {
