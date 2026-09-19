@@ -233,13 +233,21 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
       const storedBook=await readFreshStoredBook(book);
       if(!active)return;
       const sourceFile=storedBook.file||book.file;
+      const sourceBytes=(storedBook as BookRecord).fileBytes||(book as BookRecord).fileBytes;
       const sourceLocation=storedBook.location||book.location;
       const sourceProgress=typeof storedBook.progress==='number'?storedBook.progress:(book.progress||0);
       const sourceLocations=storedBook.epubLocations||book.epubLocations;
       const sourceToc=storedBook.toc||book.toc;
-      const bytes=await readStoredBookBytes(sourceFile);
+      const bytes=await readStoredBookBytes(sourceBytes||sourceFile);
       if(!active)return;
       bytesRef.current=bytes;
+      if(!sourceBytes){
+        try{
+          await db.books.update(storedBook.id,{fileBytes:bytes.slice(0)});
+        }catch(error){
+          console.warn('EPUB stable bytes migration:',error);
+        }
+      }
       const instance = ePub(bytes.slice(0)); bookRef.current = instance; await withTimeout(Promise.resolve(instance.ready),10000,'EPUB ready');
       if (sourceLocations) { try { instance.locations.load(sourceLocations); } catch (error) { console.error('EPUB locations cache:', error); } }
       if (!active || !host.current) return;
@@ -440,7 +448,7 @@ function EpubSurface({ book, settings, onProgress, onVisual, onChapterInfo, onEp
       } else report(rendition.currentLocation());
     })().catch((error) => {
       console.error('EPUB reader:', error);
-      if(active)setOpenError('Не удалось открыть сохранённую книгу. Нажмите «Повторить» — удалять книгу из библиотеки не нужно.');
+      if(active)setOpenError('Не удалось прочитать старую сохранённую копию книги на этом iPhone. Нажмите «Повторить». Если не поможет, эту книгу нужно добавить заново один раз — новые копии будут сохраняться в более надёжном формате.');
     });
     return () => {
       active = false; clearTimeout(generationTimer);clearTimeout(mapTimer);mapVersionRef.current++;rebuildMapRef.current=null;if (idleId && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
