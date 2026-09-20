@@ -131,9 +131,9 @@ export function MagicApp() {
       .book-collection{
         background:
           linear-gradient(135deg,
-            rgba(246,224,208,.18) 0%,
-            rgba(229,193,169,.16) 48%,
-            rgba(202,155,125,.10) 100%) !important;
+            rgba(246,224,208,.16) 0%,
+            rgba(229,193,169,.12) 48%,
+            rgba(202,155,125,.8) 100%) !important;
         border:1px solid rgba(255,244,235,.46) !important;
         border-radius:24px !important;
         padding:22px !important;
@@ -221,23 +221,23 @@ export function MagicApp() {
       .continue-reading-card{
         background:
           linear-gradient(135deg,
-            rgba(246,224,208,.52) 0%,
-            rgba(229,193,169,.38) 46%,
-            rgba(202,155,125,.30) 100%) !important;
+            rgba(246,224,208,.42) 0%,
+            rgba(229,193,169,.32) 46%,
+            rgba(202,155,125,.24) 100%) !important;
         border:1px solid rgba(255,244,235,.52) !important;
         box-shadow:
           inset 0 1px 0 rgba(255,255,255,.44),
           0 12px 32px rgba(83,43,24,.14) !important;
         -webkit-backdrop-filter:blur(12px) saturate(125%) !important;
-        backdrop-filter:blur(12px) saturate(125%) !important;
+        backdrop-filter:blur(8px) saturate(125%) !important;
       }
 
       .magic-sidebar{
         background:
           linear-gradient(160deg,
-            rgba(244,224,212,.36) 0%,
-            rgba(224,190,169,.24) 55%,
-            rgba(199,150,120,.18) 100%) !important;
+            rgba(244,224,212,.26) 0%,
+            rgba(224,190,169,.16) 55%,
+            rgba(199,150,120,.10) 100%) !important;
       }
 
       .library-header,
@@ -254,7 +254,7 @@ export function MagicApp() {
         background:rgba(255,242,233,.40) !important;
         border-color:rgba(255,239,228,.42) !important;
         -webkit-backdrop-filter:blur(12px) saturate(120%) !important;
-        backdrop-filter:blur(12px) saturate(120%) !important;
+        backdrop-filter:blur(8px) saturate(120%) !important;
         box-shadow:inset 0 1px 0 rgba(255,255,255,.30) !important;
       }
 
