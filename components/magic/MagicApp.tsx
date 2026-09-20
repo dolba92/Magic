@@ -126,6 +126,32 @@ export function MagicApp() {
           0 10px 28px rgba(83,43,24,.12) !important;
       }
 
+
+      /* Общая подложка именно под всей сеткой книг */
+      .book-collection{
+        background:
+          linear-gradient(135deg,
+            rgba(248,231,219,.88) 0%,
+            rgba(233,204,184,.84) 50%,
+            rgba(211,172,145,.78) 100%) !important;
+        border:1px solid rgba(255,246,238,.72) !important;
+        border-radius:24px !important;
+        padding:22px !important;
+        -webkit-backdrop-filter:blur(24px) saturate(112%) !important;
+        backdrop-filter:blur(24px) saturate(112%) !important;
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,.58),
+          0 12px 30px rgba(77,42,25,.12) !important;
+      }
+
+      .book-collection .book-card h3,
+      .book-collection .book-card p,
+      .book-collection .book-card span,
+      .book-collection .book-card small{
+        color:#171310 !important;
+        opacity:1 !important;
+      }
+
       /* Повышенный контраст для бледных подписей */
       .search-box input{
         color:#171310 !important;
