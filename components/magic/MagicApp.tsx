@@ -127,21 +127,21 @@ export function MagicApp() {
       }
 
 
-      /* Общая подложка именно под всей сеткой книг */
+      /* Общая подложка под книгами — чуть прозрачнее основных стеклянных панелей */
       .book-collection{
         background:
           linear-gradient(135deg,
-            rgba(248,231,219,.88) 0%,
-            rgba(233,204,184,.84) 50%,
-            rgba(211,172,145,.78) 100%) !important;
-        border:1px solid rgba(255,246,238,.72) !important;
+            rgba(246,224,208,.46) 0%,
+            rgba(229,193,169,.34) 48%,
+            rgba(202,155,125,.27) 100%) !important;
+        border:1px solid rgba(255,244,235,.46) !important;
         border-radius:24px !important;
         padding:22px !important;
-        -webkit-backdrop-filter:blur(24px) saturate(112%) !important;
-        backdrop-filter:blur(24px) saturate(112%) !important;
+        -webkit-backdrop-filter:blur(28px) saturate(118%) !important;
+        backdrop-filter:blur(28px) saturate(118%) !important;
         box-shadow:
-          inset 0 1px 0 rgba(255,255,255,.58),
-          0 12px 30px rgba(77,42,25,.12) !important;
+          inset 0 1px 0 rgba(255,255,255,.38),
+          0 10px 26px rgba(83,43,24,.10) !important;
       }
 
       .book-collection .book-card h3,
@@ -175,6 +175,14 @@ export function MagicApp() {
       .continue-reading-author{
         color:#4a3a32 !important;
         opacity:1 !important;
+      }
+
+
+      .magic-sidebar .guest-note,
+      .magic-sidebar .guest-note *{
+        color:#171310 !important;
+        opacity:1 !important;
+        text-shadow:none !important;
       }
 
       /* Явная полоса прогресса в блоке «Продолжить чтение» */
