@@ -138,7 +138,7 @@ export function MagicApp() {
         border-radius:24px !important;
         padding:22px !important;
         -webkit-backdrop-filter:blur(28px) saturate(118%) !important;
-        backdrop-filter:blur(24px) saturate(118%) !important;
+        backdrop-filter:blur(18px) saturate(118%) !important;
         box-shadow:
           inset 0 1px 0 rgba(255,255,255,.38),
           0 10px 26px rgba(83,43,24,.10) !important;
