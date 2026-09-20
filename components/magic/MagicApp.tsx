@@ -115,12 +115,12 @@ export function MagicApp() {
       .content-panel{
         background:
           linear-gradient(135deg,
-            rgba(246,224,208,.78) 0%,
-            rgba(229,193,169,.70) 48%,
-            rgba(202,155,125,.60) 100%) !important;
+            rgba(246,224,208,.68) 0%,
+            rgba(229,193,169,.60) 48%,
+            rgba(202,155,125,.50) 100%) !important;
         border:1px solid rgba(255,244,235,.64) !important;
-        -webkit-backdrop-filter:blur(8px) saturate(118%) !important;
-        backdrop-filter:blur(8px) saturate(118%) !important;
+        -webkit-backdrop-filter:blur(4px) saturate(118%) !important;
+        backdrop-filter:blur(4px) saturate(118%) !important;
         box-shadow:
           inset 0 1px 0 rgba(255,255,255,.46),
           0 10px 28px rgba(83,43,24,.12) !important;
@@ -131,13 +131,13 @@ export function MagicApp() {
       .book-collection{
         background:
           linear-gradient(135deg,
-            rgba(246,224,208,.20) 0%,
-            rgba(229,193,169,.18) 48%,
-            rgba(202,155,125,.12) 100%) !important;
+            rgba(246,224,208,.18) 0%,
+            rgba(229,193,169,.16) 48%,
+            rgba(202,155,125,.10) 100%) !important;
         border:1px solid rgba(255,244,235,.46) !important;
         border-radius:24px !important;
         padding:22px !important;
-        -webkit-backdrop-filter:blur(28px) saturate(118%) !important;
+        -webkit-backdrop-filter:blur(20px) saturate(118%) !important;
         backdrop-filter:blur(2px) saturate(118%) !important;
         box-shadow:
           inset 0 1px 0 rgba(255,255,255,.38),
