@@ -85,6 +85,40 @@ export function MagicApp() {
     <style>{`
       .magic-sidebar .magic-logo{display:block;width:154px;height:154px;max-width:78%;object-fit:contain;margin:6px auto 18px;border-radius:28px}\n      @media (max-width:820px){.magic-sidebar .magic-logo{width:118px;height:118px}}\n
 
+      /* Логотип Magic Books в мобильной шапке */
+      .mobile-brand-logo{
+        display:none;
+      }
+
+      @media (max-width:820px){
+        .library-header{
+          display:grid !important;
+          grid-template-columns:auto minmax(0,1fr) auto !important;
+          align-items:center !important;
+          gap:10px !important;
+        }
+
+        .mobile-brand-logo{
+          display:block;
+          width:50px;
+          height:50px;
+          object-fit:contain;
+          border-radius:14px;
+          flex:none;
+          filter:drop-shadow(0 5px 12px rgba(84,50,30,.14));
+        }
+
+        .library-header h1{
+          font-size:clamp(26px,7vw,34px) !important;
+          line-height:1.05 !important;
+          margin:0 !important;
+        }
+
+        .library-header .header-actions{
+          margin:0 !important;
+        }
+      }
+
       /* Текст библиотеки — чёрный/нейтральный вместо коричневого */
       .library-workspace,
       .library-workspace h1,
@@ -310,7 +344,7 @@ export function MagicApp() {
     `}</style>
     {dragging&&<div className="drop-overlay"><BookOpen/><strong>Отпустите файлы, чтобы добавить книги</strong></div>}
     <aside className="magic-sidebar glass-panel"><img className="magic-logo" src="/magic-books-logo.png" alt="Magic Books" title="Magic Books"/><nav aria-label="Основная навигация">{nav.map(([Icon,label,key])=><button className={`nav-item ${section===key?'active':''}`} key={key} onClick={()=>{setSection(key);if(key==='search')setTimeout(()=>searchRef.current?.focus(),0)}}><Icon/><span>{label}</span></button>)}</nav><p className="guest-note">Локальный режим · книги хранятся на этом устройстве</p></aside>
-    <section className="library-workspace"><header className="library-header glass-panel"><div>{section==='settings'?<><p className="eyebrow">Ваши предпочтения</p><h1>Настройки</h1></>:<h1>Моя Библиотека</h1>}</div><div className="header-actions"><button className="primary-action" onClick={()=>inputRef.current?.click()}><Plus/>Добавить книгу</button></div><input ref={inputRef} className="sr-only" type="file" accept=".epub,.fb2" multiple onChange={(e)=>{void processFiles(Array.from(e.target.files||[]));e.currentTarget.value=''}}/></header>
+    <section className="library-workspace"><header className="library-header glass-panel"><img className="mobile-brand-logo" src="/magic-books-logo.png" alt="Magic Books" title="Magic Books"/><div>{section==='settings'?<><p className="eyebrow">Ваши предпочтения</p><h1>Настройки</h1></>:<h1>Моя Библиотека</h1>}</div><div className="header-actions"><button className="primary-action" onClick={()=>inputRef.current?.click()}><Plus/>Добавить книгу</button></div><input ref={inputRef} className="sr-only" type="file" accept=".epub,.fb2" multiple onChange={(e)=>{void processFiles(Array.from(e.target.files||[]));e.currentTarget.value=''}}/></header>
       {(section==='library'||section==='search')&&<LibraryView books={visible} allCount={books.length} prefs={prefs} query={query} setQuery={setQuery} searchRef={searchRef} changePrefs={changePrefs} openBook={openBook} setDeleteBook={setDeleteBook} repairCover={repairCover} addBook={()=>inputRef.current?.click()} loading={loading} continueBook={section==='library'?continueBook:null} chapterInfo={continueBook?chapterInfoByBook[continueBook.id]||null:null}/>} 
       {section==='settings'&&<AppSettings prefs={prefs} changePrefs={changePrefs}/>} 
     </section>
