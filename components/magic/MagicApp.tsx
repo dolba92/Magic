@@ -84,6 +84,61 @@ export function MagicApp() {
   return <main className={`magic-shell ${dragging?'is-dragging':''}`} onDragOver={(e)=>{e.preventDefault();setDragging(true)}} onDragLeave={()=>setDragging(false)} onDrop={(e)=>{e.preventDefault();setDragging(false);void processFiles(Array.from(e.dataTransfer.files))}}>
     <style>{`
       .magic-sidebar .magic-logo{display:block;width:154px;height:154px;max-width:78%;object-fit:contain;margin:6px auto 18px;border-radius:28px}\n      @media (max-width:820px){.magic-sidebar .magic-logo{width:118px;height:118px}}\n
+
+      /* Текст библиотеки — чёрный/нейтральный вместо коричневого */
+      .library-workspace,
+      .library-workspace h1,
+      .library-workspace h2,
+      .library-workspace h3,
+      .library-workspace p,
+      .library-workspace span,
+      .library-workspace small,
+      .library-workspace label,
+      .library-workspace .continue-reading-kicker,
+      .library-workspace .continue-reading-author,
+      .library-workspace .continue-reading-chapter,
+      .library-workspace .continue-reading-progress b,
+      .magic-sidebar .nav-item:not(.active){
+        color:#171310 !important;
+      }
+
+      .magic-sidebar .nav-item.active,
+      .primary-action,
+      .continue-reading-action{
+        color:#fff !important;
+      }
+
+      /* Явная полоса прогресса в блоке «Продолжить чтение» */
+      .continue-reading-progress{
+        width:100%;
+        max-width:640px;
+        gap:12px;
+      }
+
+      .continue-progress-track{
+        position:relative;
+        flex:1;
+        height:10px;
+        overflow:hidden;
+        border-radius:999px;
+        background:rgba(103,55,31,.18);
+        box-shadow:inset 0 1px 3px rgba(73,39,23,.18);
+      }
+
+      .continue-progress-fill{
+        height:100%;
+        min-width:0;
+        border-radius:inherit;
+        background:linear-gradient(90deg,#6d351f 0%,#8b4a2c 55%,#a7603d 100%);
+        box-shadow:0 0 8px rgba(112,70,47,.20);
+        transition:width .25s ease;
+      }
+
+      .continue-reading-progress b{
+        min-width:42px;
+        font-weight:800;
+      }
+
       /* Тёплое матовое стекло для Magic Books */
       .glass-panel,
       .continue-reading-card{
@@ -211,7 +266,7 @@ function ContinueReadingCard({book,chapterInfo,onOpen,onCoverError}:{book:BookRe
       <h2>{book.title}</h2>
       <div className="continue-reading-author">{book.authors.join(', ')}</div>
       <div className="continue-reading-chapter">{chapterText}</div>
-      <div className="continue-reading-progress"><Progress value={progress}/><b>{progress}%</b></div>
+      <div className="continue-reading-progress"><div className="continue-progress-track" aria-label={`Прочитано ${progress}%`}><div className="continue-progress-fill" style={{width:`${progress}%`}}/></div><b>{progress}%</b></div>
     </div>
     <button className="continue-reading-action" onClick={onOpen}>Продолжить<ArrowRight/></button>
   </section>;
