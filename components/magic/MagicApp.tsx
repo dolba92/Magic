@@ -228,16 +228,16 @@ export function MagicApp() {
         box-shadow:
           inset 0 1px 0 rgba(255,255,255,.44),
           0 12px 32px rgba(83,43,24,.14) !important;
-        -webkit-backdrop-filter:blur(22px) saturate(125%) !important;
-        backdrop-filter:blur(22px) saturate(125%) !important;
+        -webkit-backdrop-filter:blur(12px) saturate(125%) !important;
+        backdrop-filter:blur(12px) saturate(125%) !important;
       }
 
       .magic-sidebar{
         background:
           linear-gradient(160deg,
-            rgba(244,224,212,.56) 0%,
-            rgba(224,190,169,.40) 55%,
-            rgba(199,150,120,.28) 100%) !important;
+            rgba(244,224,212,.36) 0%,
+            rgba(224,190,169,.24) 55%,
+            rgba(199,150,120,.18) 100%) !important;
       }
 
       .library-header,
