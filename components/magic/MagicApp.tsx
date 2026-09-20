@@ -110,6 +110,38 @@ export function MagicApp() {
 
 
 
+
+      /* Подписи под каждой книгой — отдельная более плотная стеклянная подложка */
+      .book-details{
+        margin-top:8px;
+        padding:10px 12px 11px;
+        border-radius:14px;
+        background:
+          linear-gradient(135deg,
+            rgba(252,239,229,.86) 0%,
+            rgba(236,207,187,.82) 55%,
+            rgba(214,174,148,.78) 100%);
+        border:1px solid rgba(255,247,240,.72);
+        -webkit-backdrop-filter:blur(16px) saturate(118%);
+        backdrop-filter:blur(16px) saturate(118%);
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,.55),
+          0 6px 16px rgba(77,42,25,.10);
+      }
+
+      .book-details h3,
+      .book-details p,
+      .book-details span,
+      .book-details small{
+        color:#171310 !important;
+        opacity:1 !important;
+        text-shadow:0 1px 0 rgba(255,255,255,.34);
+      }
+
+      .book-details .book-progress{
+        margin-top:7px;
+      }
+
       /* Подложка под сеткой книг — чуть плотнее, чтобы текст не терялся */
       .content-panel{
         background:
@@ -314,6 +346,6 @@ function ContinueReadingCard({book,chapterInfo,onOpen,onCoverError}:{book:BookRe
   </section>;
 }
 
-function BookCard({book,onOpen,onDelete,onCoverError}:{book:BookRecord;onOpen:()=>void;onDelete:()=>void;onCoverError:()=>void}) { const [brokenCover,setBrokenCover]=useState(false);useEffect(()=>setBrokenCover(false),[book.cover]);const hasCover=!!book.cover&&!brokenCover;return <article className="book-card"><button className="cover-button" onClick={onOpen} aria-label={`Открыть «${book.title}»`}>{hasCover?<img src={book.cover} alt="" onError={()=>{setBrokenCover(true);onCoverError()}}/>:<span className="cover-placeholder" aria-label="Обложка отсутствует"><BookOpen/><small>Обложки нет</small></span>}</button><div className="book-meta"><div><h3>{book.title}</h3><p>{book.authors.join(', ')}</p></div><DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={`Действия с книгой «${book.title}»`}/> }><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end" side="bottom" sideOffset={8} className="book-card-menu"><DropdownMenuItem onClick={onOpen}>Открыть</DropdownMenuItem><DropdownMenuItem onClick={onOpen}>Информация</DropdownMenuItem><DropdownMenuItem variant="destructive" onClick={onDelete}>Удалить</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div><div className="book-progress"><span>{book.progress}%</span><Progress value={book.progress}/><small>{book.lastOpened?`Открывали ${formatDate(book.lastOpened)}`:`Добавлено ${formatDate(book.dateAdded)}`}</small></div></article> }
+function BookCard({book,onOpen,onDelete,onCoverError}:{book:BookRecord;onOpen:()=>void;onDelete:()=>void;onCoverError:()=>void}) { const [brokenCover,setBrokenCover]=useState(false);useEffect(()=>setBrokenCover(false),[book.cover]);const hasCover=!!book.cover&&!brokenCover;return <article className="book-card"><button className="cover-button" onClick={onOpen} aria-label={`Открыть «${book.title}»`}>{hasCover?<img src={book.cover} alt="" onError={()=>{setBrokenCover(true);onCoverError()}}/>:<span className="cover-placeholder" aria-label="Обложка отсутствует"><BookOpen/><small>Обложки нет</small></span>}</button><div className="book-details"><div className="book-meta"><div><h3>{book.title}</h3><p>{book.authors.join(', ')}</p></div><DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={`Действия с книгой «${book.title}»`}/> }><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end" side="bottom" sideOffset={8} className="book-card-menu"><DropdownMenuItem onClick={onOpen}>Открыть</DropdownMenuItem><DropdownMenuItem onClick={onOpen}>Информация</DropdownMenuItem><DropdownMenuItem variant="destructive" onClick={onDelete}>Удалить</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div><div className="book-progress"><span>{book.progress}%</span><Progress value={book.progress}/><small>{book.lastOpened?`Открывали ${formatDate(book.lastOpened)}`:`Добавлено ${formatDate(book.dateAdded)}`}</small></div></div></article> }
 
 function AppSettings({prefs,changePrefs}:{prefs:LibraryPreferences;changePrefs:(v:Partial<LibraryPreferences>)=>void}) { return <section className="content-panel settings-page glass-panel"><h2>Вид библиотеки</h2><div className="preference-grid"><label>Режим<select value={prefs.view} onChange={(e)=>changePrefs({view:e.target.value as LibraryPreferences['view']})}><option value="grid">Сетка</option><option value="compact">Компактная сетка</option><option value="large">Крупные обложки</option><option value="list">Список</option></select></label><label>Книг в ряд<select value={prefs.columns} onChange={(e)=>changePrefs({columns:e.target.value==='auto'?'auto':Number(e.target.value) as 2|3|4|5|6})}><option value="auto">Автоматически</option>{[2,3,4,5,6].map(n=><option key={n}>{n}</option>)}</select></label></div><h2>Тема приложения</h2><div className="theme-choice">{([['light','Светлая'],['dark','Тёмная'],['system','Системная']] as const).map(([key,label])=><button className={prefs.appTheme===key?'selected':''} key={key} onClick={()=>changePrefs({appTheme:key})}>{prefs.appTheme===key&&<Check/>}{label}</button>)}</div></section> }
