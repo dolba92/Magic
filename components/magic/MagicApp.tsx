@@ -119,8 +119,8 @@ export function MagicApp() {
             rgba(229,193,169,.70) 48%,
             rgba(202,155,125,.60) 100%) !important;
         border:1px solid rgba(255,244,235,.64) !important;
-        -webkit-backdrop-filter:blur(22px) saturate(118%) !important;
-        backdrop-filter:blur(22px) saturate(118%) !important;
+        -webkit-backdrop-filter:blur(20px) saturate(118%) !important;
+        backdrop-filter:blur(20px) saturate(118%) !important;
         box-shadow:
           inset 0 1px 0 rgba(255,255,255,.46),
           0 10px 28px rgba(83,43,24,.12) !important;
@@ -138,7 +138,7 @@ export function MagicApp() {
         border-radius:24px !important;
         padding:22px !important;
         -webkit-backdrop-filter:blur(28px) saturate(118%) !important;
-        backdrop-filter:blur(18px) saturate(118%) !important;
+        backdrop-filter:blur(12px) saturate(118%) !important;
         box-shadow:
           inset 0 1px 0 rgba(255,255,255,.38),
           0 10px 26px rgba(83,43,24,.10) !important;
