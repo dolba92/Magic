@@ -108,6 +108,32 @@ export function MagicApp() {
         color:#fff !important;
       }
 
+
+      /* Повышенный контраст для бледных подписей */
+      .search-box input{
+        color:#171310 !important;
+      }
+
+      .search-box input::placeholder{
+        color:#4a3a32 !important;
+        opacity:1 !important;
+      }
+
+      .sidebar-footer,
+      .sidebar-footer *,
+      .magic-sidebar .sidebar-footer,
+      .magic-sidebar .sidebar-footer *{
+        color:#3a2c25 !important;
+        opacity:1 !important;
+      }
+
+      .book-card .muted,
+      .book-card small,
+      .continue-reading-author{
+        color:#4a3a32 !important;
+        opacity:1 !important;
+      }
+
       /* Явная полоса прогресса в блоке «Продолжить чтение» */
       .continue-reading-progress{
         width:100%;
