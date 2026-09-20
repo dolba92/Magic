@@ -109,6 +109,22 @@ export function MagicApp() {
       }
 
 
+
+      /* Подложка под сеткой книг — чуть плотнее, чтобы текст не терялся */
+      .content-panel{
+        background:
+          linear-gradient(135deg,
+            rgba(246,224,208,.66) 0%,
+            rgba(229,193,169,.56) 48%,
+            rgba(202,155,125,.46) 100%) !important;
+        border:1px solid rgba(255,244,235,.58) !important;
+        -webkit-backdrop-filter:blur(20px) saturate(120%) !important;
+        backdrop-filter:blur(20px) saturate(120%) !important;
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,.40),
+          0 10px 28px rgba(83,43,24,.12) !important;
+      }
+
       /* Повышенный контраст для бледных подписей */
       .search-box input{
         color:#171310 !important;
