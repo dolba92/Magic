@@ -131,9 +131,9 @@ export function MagicApp() {
       .book-collection{
         background:
           linear-gradient(135deg,
-            rgba(246,224,208,.46) 0%,
-            rgba(229,193,169,.34) 48%,
-            rgba(202,155,125,.27) 100%) !important;
+            rgba(246,224,208,.36) 0%,
+            rgba(229,193,169,.24) 48%,
+            rgba(202,155,125,.20) 100%) !important;
         border:1px solid rgba(255,244,235,.46) !important;
         border-radius:24px !important;
         padding:22px !important;
