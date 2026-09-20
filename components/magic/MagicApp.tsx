@@ -115,9 +115,9 @@ export function MagicApp() {
       .content-panel{
         background:
           linear-gradient(135deg,
-            rgba(246,224,208,.68) 0%,
-            rgba(229,193,169,.60) 48%,
-            rgba(202,155,125,.50) 100%) !important;
+            rgba(246,224,208,.58) 0%,
+            rgba(229,193,169,.50) 48%,
+            rgba(202,155,125,.42) 100%) !important;
         border:1px solid rgba(255,244,235,.64) !important;
         -webkit-backdrop-filter:blur(4px) saturate(118%) !important;
         backdrop-filter:blur(4px) saturate(118%) !important;
@@ -137,7 +137,7 @@ export function MagicApp() {
         border:1px solid rgba(255,244,235,.46) !important;
         border-radius:24px !important;
         padding:22px !important;
-        -webkit-backdrop-filter:blur(20px) saturate(118%) !important;
+        -webkit-backdrop-filter:blur(12px) saturate(118%) !important;
         backdrop-filter:blur(2px) saturate(118%) !important;
         box-shadow:
           inset 0 1px 0 rgba(255,255,255,.38),
@@ -221,23 +221,23 @@ export function MagicApp() {
       .continue-reading-card{
         background:
           linear-gradient(135deg,
-            rgba(246,224,208,.42) 0%,
-            rgba(229,193,169,.32) 46%,
-            rgba(202,155,125,.24) 100%) !important;
+            rgba(246,224,208,.32) 0%,
+            rgba(229,193,169,.22) 46%,
+            rgba(202,155,125,.14) 100%) !important;
         border:1px solid rgba(255,244,235,.52) !important;
         box-shadow:
           inset 0 1px 0 rgba(255,255,255,.44),
           0 12px 32px rgba(83,43,24,.14) !important;
-        -webkit-backdrop-filter:blur(12px) saturate(125%) !important;
-        backdrop-filter:blur(8px) saturate(125%) !important;
+        -webkit-backdrop-filter:blur(8px) saturate(125%) !important;
+        backdrop-filter:blur(4px) saturate(125%) !important;
       }
 
       .magic-sidebar{
         background:
           linear-gradient(160deg,
-            rgba(244,224,212,.26) 0%,
-            rgba(224,190,169,.16) 55%,
-            rgba(199,150,120,.10) 100%) !important;
+            rgba(244,224,212,.20) 0%,
+            rgba(224,190,169,.10) 55%,
+            rgba(199,150,120,.8) 100%) !important;
       }
 
       .library-header,
